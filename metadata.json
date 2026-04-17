@@ -1,0 +1,7 @@
+{
+  "name": "Realcred Mobile",
+  "description": "Plataforma de soluções financeiras para crédito consignado, antecipação de FGTS e empréstimos.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

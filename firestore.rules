@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string
+    //   - email: string (required)
+    //   - phone: string
+    //   - cpf: string
+    //   - role: string (required, ['client', 'admin'])
+    //   - createdAt: timestamp
+    //
+    // Collection: proposals
+    // Document ID: {proposalId}
+    // Fields:
+    //   - userId: string (required)
+    //   - type: string (required, ['CONSIGNADO', 'FGTS', 'PESSOAL', 'CARTAO', 'LUZ', 'CLT'])
+    //   - value: number (required)
+    //   - installments: int
+    //   - status: string (required, ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED'])
+    //   - createdAt: timestamp
+    //   - updatedAt: timestamp
+    //
+    // Collection: documents
+    // Document ID: {documentId}
+    // Fields:
+    //   - proposalId: string (required)
+    //   - userId: string (required)
+    //   - type: string (required, ['RG', 'RESIDENCE', 'PAYSLIP'])
+    //   - url: string (required)
+    //   - status: string (required, ['PENDING', 'VERIFIED', 'REJECTED'])
+    //   - createdAt: timestamp
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "alancolombi30@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return data.uid is string && 
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['client', 'admin'];
+    }
+
+    function isValidProposal(data) {
+      return data.userId is string &&
+             data.type in ['CONSIGNADO', 'FGTS', 'PESSOAL', 'CARTAO', 'LUZ', 'CLT'] &&
+             data.value is number && data.value > 0 &&
+             data.status in ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED'];
+    }
+
+    function isValidDocument(data) {
+      return data.proposalId is string &&
+             data.userId is string &&
+             data.type in ['RG', 'RESIDENCE', 'PAYSLIP'] &&
+             data.url is string &&
+             data.status in ['PENDING', 'VERIFIED', 'REJECTED'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'client' || isAdmin());
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /proposals/{proposalId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidProposal(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidProposal(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /documents/{documentId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidDocument(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidDocument(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

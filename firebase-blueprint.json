@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User full name" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "cpf": { "type": "string" },
+        "role": { "type": "string", "enum": ["client", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Proposal": {
+      "title": "Proposal",
+      "description": "Credit proposal details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["CONSIGNADO", "FGTS", "PESSOAL", "CARTAO", "LUZ", "CLT"] },
+        "value": { "type": "number" },
+        "installments": { "type": "integer" },
+        "status": { "type": "string", "enum": ["PENDING", "ANALYSIS", "APPROVED", "PAID", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "value", "status"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "Uploaded document metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "proposalId": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["RG", "RESIDENCE", "PAYSLIP"] },
+        "url": { "type": "string", "format": "uri" },
+        "status": { "type": "string", "enum": ["PENDING", "VERIFIED", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["proposalId", "userId", "type", "url", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/proposals/{proposalId}": {
+      "schema": "Proposal",
+      "description": "Credit proposals"
+    },
+    "/documents/{documentId}": {
+      "schema": "Document",
+      "description": "Document metadata"
+    }
+  }
+}
