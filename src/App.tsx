@@ -201,17 +201,23 @@ const Badge = ({ status }: { status: string }) => {
 // --- Pages ---
 
 const Login = () => {
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    
     const provider = new GoogleAuthProvider();
     try {
-      // Forzar el prompt de selección de cuenta
+      // Usar select_account apenas se não houver erro prévio
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
       
       if (!userDoc.exists()) {
-        await setDoc(doc(db, 'users', user.uid), {
+        await setDoc(userRef, {
           uid: user.uid,
           displayName: user.displayName,
           email: user.email,
@@ -221,6 +227,7 @@ const Login = () => {
       }
     } catch (error: any) {
       console.error('Login error:', error);
+      setIsLoggingIn(false);
       if (error.code === 'auth/popup-blocked') {
         alert('O login foi bloqueado pelo seu navegador. Por favor, habilite popups ou abra o aplicativo em uma nova aba para entrar.');
       } else if (error.code === 'auth/popup-closed-by-user') {
@@ -244,8 +251,24 @@ const Login = () => {
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Realcred Mobile</h1>
         <p className="text-slate-500 mb-10">Sua plataforma digital de crédito rápido, seguro e transparente.</p>
         
-        <Button onClick={handleLogin} className="w-full py-4 text-lg" variant="primary">
-          Entrar com Google
+        <Button 
+          onClick={handleLogin} 
+          disabled={isLoggingIn}
+          className="w-full py-4 text-lg gap-3" 
+          variant="primary"
+        >
+          {isLoggingIn ? (
+            <>
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+              />
+              Entrando...
+            </>
+          ) : (
+            'Entrar com Google'
+          )}
         </Button>
         
         <p className="mt-8 text-xs text-slate-400">
@@ -845,9 +868,20 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const userDoc = await getDoc(userRef);
+        
         if (userDoc.exists()) {
           setUser(userDoc.data() as AppUser);
+        } else {
+          // Fallback: Se o documento ainda não existir (usuário novo em processo de criação)
+          // setamos um estado parcial para permitir a navegação sem exigir refresh
+          setUser({
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName,
+            email: firebaseUser.email,
+            role: 'client',
+          } as AppUser);
         }
       } else {
         setUser(null);
