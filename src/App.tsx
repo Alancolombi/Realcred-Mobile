@@ -204,6 +204,8 @@ const Login = () => {
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
+      // Forzar el prompt de selección de cuenta
+      provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -217,8 +219,15 @@ const Login = () => {
           createdAt: new Date().toISOString(),
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      if (error.code === 'auth/popup-blocked') {
+        alert('O login foi bloqueado pelo seu navegador. Por favor, habilite popups ou abra o aplicativo em uma nova aba para entrar.');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        // Silenciosamente ignorar se o usuário fechou
+      } else {
+        alert('Erro ao entrar com Google: ' + error.message + '\n\nDica: Tente abrir o aplicativo em uma nova aba fora do editor.');
+      }
     }
   };
 
