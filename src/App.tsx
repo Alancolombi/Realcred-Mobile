@@ -504,6 +504,19 @@ const Simulator = () => {
     return { monthly, total };
   };
 
+  const handleSimulatorWhatsApp = () => {
+    const typeLabels: Record<string, string> = {
+      FGTS: 'Antecipação FGTS',
+      CONSIGNADO: 'Consignado INSS',
+      PESSOAL: 'Crédito Pessoal',
+      CARTAO: 'Saque Cartão',
+      LUZ: 'Crédito na Luz',
+      CLT: 'Crédito CLT'
+    };
+    const text = `Olá! Fiz uma simulação no App Realcred:\n\n*Modalidade:* ${typeLabels[type]}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n*Prazo:* ${installments} meses\n\nGostaria de prosseguir com a contratação!`;
+    window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   const { monthly, total } = calculateResult();
 
   return (
@@ -603,7 +616,7 @@ const Simulator = () => {
         </div>
       </Card>
 
-      <Button className="w-full py-4 text-lg" variant="secondary">
+      <Button className="w-full py-4 text-lg" variant="secondary" onClick={handleSimulatorWhatsApp}>
         Solicitar Agora
       </Button>
       
@@ -626,6 +639,17 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   const handleFinish = () => {
     // In a real app, this would save to Firestore and upload to Storage
     navigate('/');
+  };
+
+  const handleWhatsAppProposal = () => {
+    const typeLabels: Record<string, string> = {
+      FGTS: 'Antecipação FGTS',
+      CONSIGNADO: 'Consignado INSS',
+      PESSOAL: 'Crédito Pessoal',
+      CLT: 'Crédito CLT'
+    };
+    const text = `Olá! Acabei de enviar uma proposta pelo App Realcred:\n\n*Modalidade:* ${typeLabels[type]}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n\nFico no aguardo do contato para finalizar!`;
+    window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
@@ -758,7 +782,12 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
                 Nossos consultores entrarão em contato via WhatsApp em até 15 minutos para finalizar o processo.
               </p>
             </Card>
-            <Button className="w-full py-4" onClick={handleFinish}>Voltar ao Início</Button>
+            <div className="flex flex-col gap-3">
+              <Button className="w-full py-4" variant="secondary" onClick={handleWhatsAppProposal}>
+                <MessageSquare size={18} className="mr-2" /> Finalizar no WhatsApp
+              </Button>
+              <Button variant="ghost" className="w-full text-slate-400" onClick={handleFinish}>Voltar ao Início</Button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
