@@ -9,9 +9,21 @@ import {
   useLocation
 } from 'react-router-dom';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  addDoc, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  Timestamp
+} from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { User as AppUser } from './types';
+import { User as AppUser, Proposal } from './types';
 import { 
   LayoutDashboard, 
   Calculator, 
@@ -280,11 +292,42 @@ const Login = () => {
 };
 
 const Dashboard = ({ user }: { user: AppUser }) => {
-  // Mock data for MVP demonstration
-  const proposals = [
-    { id: '1', type: 'FGTS', value: 2500, status: 'PAID', date: '2024-03-20' },
-    { id: '2', type: 'CONSIGNADO', value: 15000, status: 'ANALYSIS', date: '2024-04-01' },
-  ];
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'proposals'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const proposalsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Proposal[];
+      setProposals(proposalsData);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user.uid]);
+
+  const totalRequested = proposals.reduce((acc, p) => acc + p.value, 0);
+  const paidProposalsCount = proposals.filter(p => p.status === 'PAID').length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+          className="w-8 h-8 border-3 border-brand-blue border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -303,13 +346,13 @@ const Dashboard = ({ user }: { user: AppUser }) => {
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-4 bg-brand-blue text-white border-none">
           <TrendingUp size={20} className="mb-2 opacity-80" />
-          <div className="text-2xl font-bold">R$ 17.500</div>
+          <div className="text-2xl font-bold">R$ {totalRequested.toLocaleString('pt-BR')}</div>
           <div className="text-[10px] uppercase font-bold opacity-70">Crédito Solicitado</div>
         </Card>
         <Card className="p-4 bg-brand-orange text-white border-none">
           <CheckCircle2 size={20} className="mb-2 opacity-80" />
-          <div className="text-2xl font-bold">1</div>
-          <div className="text-[10px] uppercase font-bold opacity-70">Proposta Paga</div>
+          <div className="text-2xl font-bold">{paidProposalsCount}</div>
+          <div className="text-[10px] uppercase font-bold opacity-70">Proposta{paidProposalsCount !== 1 ? 's' : ''} Paga{paidProposalsCount !== 1 ? 's' : ''}</div>
         </Card>
       </div>
 
@@ -320,26 +363,42 @@ const Dashboard = ({ user }: { user: AppUser }) => {
           <Link to="/proposals" className="text-xs font-bold text-brand-blue hover:underline">Ver todas</Link>
         </div>
         <div className="space-y-3">
-          {proposals.map((p) => (
-            <Card key={p.id} className="p-4 flex items-center justify-between hover:border-brand-blue/20 transition-colors cursor-pointer">
-              <div className="flex items-center gap-4">
-                <div className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center",
-                  p.type === 'FGTS' ? "bg-brand-orange/10 text-brand-orange" : "bg-brand-blue/10 text-brand-blue"
-                )}>
-                  <FileText size={24} />
-                </div>
-                <div>
-                  <div className="font-bold text-slate-900">{p.type === 'FGTS' ? 'Antecipação FGTS' : 'Consignado INSS'}</div>
-                  <div className="text-xs text-slate-500">R$ {p.value.toLocaleString('pt-BR')} • {p.date}</div>
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <Badge status={p.status} />
-                <ChevronRight size={16} className="text-slate-300" />
-              </div>
+          {proposals.length === 0 ? (
+            <Card className="p-8 text-center bg-slate-50 border-dashed">
+              <p className="text-slate-400 text-sm">Você ainda não possui propostas.</p>
+              <Link to="/new-proposal">
+                <Button variant="outline" className="mt-4 text-xs font-bold">Criar Primeira Proposta</Button>
+              </Link>
             </Card>
-          ))}
+          ) : (
+            proposals.slice(0, 3).map((p) => (
+              <Card key={p.id} className="p-4 flex items-center justify-between hover:border-brand-blue/20 transition-colors cursor-pointer">
+                <div className="flex items-center gap-4">
+                  <div className={cn(
+                    "w-12 h-12 rounded-2xl flex items-center justify-center",
+                    p.type === 'FGTS' ? "bg-brand-orange/10 text-brand-orange" : "bg-brand-blue/10 text-brand-blue"
+                  )}>
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900">
+                      {p.type === 'FGTS' ? 'Antecipação FGTS' : 
+                       p.type === 'CONSIGNADO' ? 'Consignado INSS' : 
+                       p.type === 'PESSOAL' ? 'Crédito Pessoal' : 
+                       p.type === 'CLT' ? 'Crédito CLT' : p.type}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      R$ {p.value.toLocaleString('pt-BR')} • {new Date(p.createdAt).toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <Badge status={p.status} />
+                  <ChevronRight size={16} className="text-slate-300" />
+                </div>
+              </Card>
+            ))
+          )}
         </div>
       </section>
 
@@ -657,11 +716,36 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   const [amount, setAmount] = useState(1000);
   const [docFront, setDocFront] = useState<File | null>(null);
   const [docBack, setDocBack] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleFinish = () => {
-    // In a real app, this would save to Firestore and upload to Storage
     navigate('/');
+  };
+
+  const handleSubmitProposal = async () => {
+    try {
+      setIsSubmitting(true);
+      
+      const proposalData = {
+        userId: user.uid,
+        type,
+        value: amount,
+        installments: 12, // Default ou poderia ser extraído de uma nova etapa
+        status: 'ANALYSIS',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await addDoc(collection(db, 'proposals'), proposalData);
+      
+      setStep(4);
+    } catch (error) {
+      console.error('Error submitting proposal:', error);
+      alert('Erro ao enviar proposta. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleWhatsAppProposal = () => {
@@ -773,10 +857,21 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
 
             <Button 
               className="w-full py-4" 
-              onClick={() => setStep(4)}
-              disabled={!docFront || !docBack}
+              onClick={handleSubmitProposal}
+              disabled={!docFront || !docBack || isSubmitting}
             >
-              Enviar Proposta
+              {isSubmitting ? (
+                <>
+                  <motion.div 
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                    className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"
+                  />
+                  Enviando...
+                </>
+              ) : (
+                'Enviar Proposta'
+              )}
             </Button>
             <p className="text-[10px] text-center text-slate-400 px-6">
               Ao clicar em enviar, você garante que as imagens estão nítidas e legíveis.
