@@ -738,6 +738,24 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       };
 
       await addDoc(collection(db, 'proposals'), proposalData);
+
+      // Notificar admin via e-mail
+      try {
+        await fetch('/api/notify-simulation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user: {
+              uid: user.uid,
+              displayName: user.displayName,
+              email: user.email
+            },
+            simulation: proposalData
+          })
+        });
+      } catch (err) {
+        console.warn('Falha ao enviar notificação por e-mail silenciosa:', err);
+      }
       
       setStep(4);
     } catch (error) {
