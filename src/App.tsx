@@ -623,7 +623,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
 
       // Notificar admin via e-mail
       try {
-        await fetch('/api/notify-simulation', {
+        const response = await fetch('/api/notify-simulation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -635,8 +635,15 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
             simulation: proposalData
           })
         });
+        
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          console.error('[Email] Falha na notificação:', result.error || 'Erro desconhecido');
+        } else {
+          console.log('[Email] Notificação enviada com sucesso!');
+        }
       } catch (err) {
-        console.warn('Falha ao enviar notificação por e-mail silenciosa:', err);
+        console.warn('[Email] Erro de rede ou servidor ao notificar:', err);
       }
       
       setStep(3);
