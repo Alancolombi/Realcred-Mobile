@@ -40,9 +40,6 @@ import {
   AlertCircle,
   Menu,
   X,
-  Upload,
-  FileUp,
-  Image as ImageIcon,
   HelpCircle,
   BookOpen,
   Info,
@@ -52,117 +49,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 
 // --- Components ---
-
-interface DocumentUploadProps {
-  onFileSelect: (file: File | null) => void;
-  label: string;
-}
-
-const DocumentUpload = ({ onFileSelect, label }: DocumentUploadProps) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-
-  const validateFile = (selectedFile: File) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-    const maxSize = 5 * 1024 * 1024; // 5MB
-
-    if (!allowedTypes.includes(selectedFile.type)) {
-      setError('Formato inválido. Use JPG, PNG ou PDF.');
-      return false;
-    }
-
-    if (selectedFile.size > maxSize) {
-      setError('Arquivo muito grande. O limite é 5MB.');
-      return false;
-    }
-
-    setError(null);
-    return true;
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      if (validateFile(selectedFile)) {
-        setFile(selectedFile);
-        onFileSelect(selectedFile);
-      } else {
-        setFile(null);
-        onFileSelect(null);
-      }
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const selectedFile = e.dataTransfer.files?.[0];
-    if (selectedFile) {
-      if (validateFile(selectedFile)) {
-        setFile(selectedFile);
-        onFileSelect(selectedFile);
-      } else {
-        setFile(null);
-        onFileSelect(null);
-      }
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
-      <div 
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        className={cn(
-          "relative border-2 border-dashed rounded-2xl p-6 transition-all flex flex-col items-center justify-center text-center gap-3",
-          isDragging ? "border-brand-blue bg-brand-blue/5 scale-[1.02]" : "border-slate-200 hover:border-brand-blue/30 bg-white",
-          file ? "border-emerald-200 bg-emerald-50/30" : ""
-        )}
-      >
-        <input 
-          type="file" 
-          className="absolute inset-0 opacity-0 cursor-pointer" 
-          onChange={handleFileChange}
-          accept=".jpg,.jpeg,.png,.pdf"
-        />
-        
-        {file ? (
-          <>
-            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 size={24} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-900 truncate max-w-[200px]">{file.name}</p>
-              <p className="text-[10px] text-emerald-600 font-bold uppercase">Arquivo Carregado</p>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
-              <Upload size={24} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-700">Arraste ou clique para enviar</p>
-              <p className="text-xs text-slate-400">JPG, PNG ou PDF (Máx. 5MB)</p>
-            </div>
-          </>
-        )}
-      </div>
-      {error && (
-        <motion.p 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-xs text-rose-500 font-medium flex items-center gap-1"
-        >
-          <AlertCircle size={12} /> {error}
-        </motion.p>
-      )}
-    </div>
-  );
-};
 
 const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' | 'ghost' }>(
   ({ className, variant = 'primary', ...props }, ref) => {
@@ -471,16 +357,14 @@ const Help = () => {
     {
       category: 'Uso do Aplicativo',
       items: [
-        { q: 'Como funciona o Simulador?', a: 'Basta selecionar a modalidade, ajustar o valor e o prazo. O simulador calculará automaticamente o valor estimado das parcelas e o custo total com base nas taxas vigentes.' },
-        { q: 'Dicas para um upload de documentos sem erros?', a: 'Procure um local bem iluminado, evite reflexos no plástico do documento e verifique se todos os cantos do documento estão visíveis na foto. Aceitamos JPG, PNG e PDF até 5MB.' }
+        { q: 'Como funciona o Simulador?', a: 'Basta selecionar a modalidade, ajustar o valor e o prazo. O simulador calculará automaticamente o valor estimado das parcelas e o custo total com base nas taxas vigentes.' }
       ]
     }
   ];
 
   const tutorials = [
     { title: 'Primeiro Acesso', desc: 'Conheça seu novo dashboard', icon: LayoutDashboard },
-    { title: 'Como Simular', desc: 'Entenda taxas e prazos', icon: Calculator },
-    { title: 'Upload Seguro', desc: 'Dicas para fotos nítidas', icon: Upload }
+    { title: 'Como Simular', desc: 'Entenda taxas e prazos', icon: Calculator }
   ];
 
   return (
@@ -714,8 +598,6 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   const [step, setStep] = useState(1);
   const [type, setType] = useState('FGTS');
   const [amount, setAmount] = useState(1000);
-  const [docFront, setDocFront] = useState<File | null>(null);
-  const [docBack, setDocBack] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
@@ -757,7 +639,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
         console.warn('Falha ao enviar notificação por e-mail silenciosa:', err);
       }
       
-      setStep(4);
+      setStep(3);
     } catch (error) {
       console.error('Error submitting proposal:', error);
       alert('Erro ao enviar proposta. Tente novamente.');
@@ -786,7 +668,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
         <div>
           <h2 className="text-xl font-bold text-slate-900">Nova Solicitação</h2>
           <div className="flex gap-1 mt-1">
-            {[1, 2, 3, 4].map(s => (
+            {[1, 2, 3].map(s => (
               <div key={s} className={cn("h-1 rounded-full flex-1", s <= step ? "bg-brand-blue" : "bg-slate-200")} />
             ))}
           </div>
@@ -851,32 +733,10 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
                 className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-brand-blue"
               />
             </Card>
-            <Button className="w-full py-4" onClick={() => setStep(3)}>Confirmar Valor</Button>
-          </motion.div>
-        )}
-
-        {step === 3 && (
-          <motion.div 
-            key="step3"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            <div className="text-center">
-              <h3 className="font-bold text-slate-800">Envio de Documentos</h3>
-              <p className="text-xs text-slate-500 mt-1">Precisamos de uma foto do seu RG ou CNH (Frente e Verso)</p>
-            </div>
-            
-            <div className="space-y-4">
-              <DocumentUpload label="Documento (Frente)" onFileSelect={setDocFront} />
-              <DocumentUpload label="Documento (Verso)" onFileSelect={setDocBack} />
-            </div>
-
             <Button 
               className="w-full py-4" 
               onClick={handleSubmitProposal}
-              disabled={!docFront || !docBack || isSubmitting}
+              disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <>
@@ -891,15 +751,12 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
                 'Enviar Proposta'
               )}
             </Button>
-            <p className="text-[10px] text-center text-slate-400 px-6">
-              Ao clicar em enviar, você garante que as imagens estão nítidas e legíveis.
-            </p>
           </motion.div>
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <motion.div 
-            key="step4"
+            key="step3"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
