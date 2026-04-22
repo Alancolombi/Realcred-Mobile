@@ -22,10 +22,15 @@ async function startServer() {
   app.post('/api/notify-simulation', async (req, res) => {
     try {
       const { user, simulation } = req.body;
+      console.log(`[Email] Iniciando tentativa de notificação para: ${user.email}`);
 
       if (!resend) {
-        console.warn('RESEND_API_KEY transition not configured. Email not sent.');
-        return res.status(200).json({ success: true, message: 'Email skipped (key missing)' });
+        console.error('[Email] Erro: RESEND_API_KEY não configurada no ambiente.');
+        return res.status(200).json({ 
+          success: false, 
+          error: 'API Key não configurada',
+          hint: 'Adicione a RESEND_API_KEY nos Secrets do AI Studio.' 
+        });
       }
 
       const { data, error } = await resend.emails.send({
@@ -58,10 +63,11 @@ async function startServer() {
       });
 
       if (error) {
-        console.error('Resend error:', error);
+        console.error('[Email] Erro do Resend:', error);
         return res.status(500).json({ error: error.message });
       }
 
+      console.log('[Email] Notificação enviada com sucesso:', data?.id);
       res.status(200).json({ success: true, data });
     } catch (err: any) {
       console.error('Server error:', err);
