@@ -1,5 +1,5 @@
 export type ProposalType = 'CONSIGNADO' | 'FGTS' | 'PESSOAL' | 'CARTAO' | 'LUZ' | 'CLT';
-export type ProposalStatus = 'PENDING' | 'ANALYSIS' | 'APPROVED' | 'PAID' | 'REJECTED';
+export type ProposalStatus = 'PENDING' | 'ANALYSIS' | 'APPROVED' | 'PAID' | 'REJECTED' | 'IN_PROGRESS' | 'COMPLETED';
 export type DocumentType = 'RG' | 'RESIDENCE' | 'PAYSLIP';
 export type DocumentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 

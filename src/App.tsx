@@ -20,10 +20,12 @@ import {
   orderBy, 
   onSnapshot, 
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { User as AppUser, Proposal } from './types';
+import { User as AppUser, Proposal, ProposalStatus } from './types';
 import { 
   LayoutDashboard, 
   Calculator, 
@@ -43,7 +45,11 @@ import {
   HelpCircle,
   BookOpen,
   Info,
-  ChevronDown
+  ChevronDown,
+  Trash2,
+  Filter,
+  Search,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -88,10 +94,23 @@ const Badge = ({ status }: { status: string }) => {
     APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-100',
     PAID: 'bg-brand-blue/10 text-brand-blue border-brand-blue/20',
     REJECTED: 'bg-rose-50 text-rose-700 border-rose-100',
+    IN_PROGRESS: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    COMPLETED: 'bg-cyan-50 text-cyan-700 border-cyan-100',
   };
+
+  const labels: Record<string, string> = {
+    PAID: 'PAGO',
+    ANALYSIS: 'EM ANÁLISE',
+    APPROVED: 'APROVADO',
+    REJECTED: 'REPROVADO',
+    PENDING: 'PENDENTE',
+    IN_PROGRESS: 'EM ANDAMENTO',
+    COMPLETED: 'ATENDIDO'
+  };
+
   return (
     <span className={cn('px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border', styles[status] || styles.PENDING)}>
-      {status === 'PAID' ? 'PAGO' : status === 'ANALYSIS' ? 'EM ANÁLISE' : status === 'APPROVED' ? 'APROVADO' : status === 'REJECTED' ? 'REPROVADO' : 'PENDENTE'}
+      {labels[status] || 'PENDENTE'}
     </span>
   );
 };
@@ -831,6 +850,16 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
 const Proposals = ({ user }: { user: AppUser }) => {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const lastCountRef = React.useRef<number>(0);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Inicializar áudio de notificação
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+  }, []);
 
   useEffect(() => {
     const proposalsRef = collection(db, 'proposals');
@@ -843,12 +872,63 @@ const Proposals = ({ user }: { user: AppUser }) => {
         id: doc.id,
         ...doc.data()
       })) as Proposal[];
+      
+      // Notificação para Admin quando chega nova proposta
+      // Só dispara se já tiver carregado a lista inicial (loading === false)
+      if (user.role === 'admin' && !loading && lastCountRef.current > 0 && proposalsData.length > lastCountRef.current) {
+        if (audioRef.current) {
+          audioRef.current.play().catch(e => console.log('Audio blocked', e));
+        }
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Realcred: Nova Simulação!", {
+            body: `Nova proposta de ${proposalsData[0].type} recebida.`,
+            icon: '/favicon.ico'
+          });
+        }
+      }
+      
+      lastCountRef.current = proposalsData.length;
       setProposals(proposalsData);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user.uid, user.role]);
+  }, [user.uid, user.role, loading]);
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta proposta?')) return;
+    try {
+      setIsDeleting(id);
+      await deleteDoc(doc(db, 'proposals', id));
+    } catch (err) {
+      alert('Erro ao excluir proposta.');
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const handleUpdateStatus = async (id: string, status: ProposalStatus) => {
+    try {
+      await updateDoc(doc(db, 'proposals', id), { status, updatedAt: new Date().toISOString() });
+    } catch (err) {
+      alert('Erro ao atualizar status.');
+    }
+  };
+
+  const requestNotificationPermission = () => {
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
+  };
+
+  const filteredProposals = proposals.filter(p => {
+    const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+    const matchesSearch = !searchQuery || 
+      (p as any).userName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (p as any).userEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.id.includes(searchQuery);
+    return matchesStatus && matchesSearch;
+  });
 
   if (loading) {
     return (
@@ -863,20 +943,72 @@ const Proposals = ({ user }: { user: AppUser }) => {
   }
 
   return (
-    <div className="space-y-6 pb-20">
-      <header>
-        <h2 className="text-2xl font-bold text-slate-900">
-          {user.role === 'admin' ? 'Gestão de Propostas' : 'Minhas Propostas'}
-        </h2>
-        <p className="text-sm text-slate-500">
-          {user.role === 'admin' 
-            ? `Total de ${proposals.length} simulações registradas.` 
-            : 'Histórico de todas as suas solicitações.'}
-        </p>
+    <div className="space-y-6 pb-24">
+      <header className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">
+              {user.role === 'admin' ? 'Gestão' : 'Minhas Propostas'}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {user.role === 'admin' 
+                ? `${filteredProposals.length} registros encontrados.` 
+                : 'Histórico de todas as suas solicitações.'}
+            </p>
+          </div>
+          {user.role === 'admin' && (
+            <button 
+              onClick={requestNotificationPermission}
+              className="p-2 text-slate-400 hover:text-brand-blue bg-white rounded-xl border border-slate-100 shadow-sm"
+              title="Ativar Notificações"
+            >
+              <Bell size={20} />
+            </button>
+          )}
+        </div>
+
+        {user.role === 'admin' && (
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input 
+                type="text" 
+                placeholder="Buscar por nome, e-mail ou ID..."
+                className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-brand-blue/20 outline-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+              {[
+                { id: 'ALL', label: 'Todos' },
+                { id: 'PENDING', label: 'Pendente' },
+                { id: 'ANALYSIS', label: 'Análise' },
+                { id: 'IN_PROGRESS', label: 'Andamento' },
+                { id: 'APPROVED', label: 'Aprovado' },
+                { id: 'COMPLETED', label: 'Atendido' },
+                { id: 'REJECTED', label: 'Recusado' },
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setStatusFilter(f.id)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all",
+                    statusFilter === f.id 
+                      ? "bg-brand-blue text-white border-brand-blue" 
+                      : "bg-white text-slate-500 border-slate-200"
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
-      <div className="space-y-3">
-        {proposals.length === 0 ? (
+      <div className="space-y-4">
+        {filteredProposals.length === 0 ? (
           <Card className="p-12 text-center bg-slate-50 border-dashed">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
               <FileText size={32} />
@@ -884,58 +1016,101 @@ const Proposals = ({ user }: { user: AppUser }) => {
             <p className="text-slate-400 text-sm font-medium">Nenhuma proposta encontrada.</p>
           </Card>
         ) : (
-          proposals.map((p) => (
-            <Card key={p.id} className="p-4 hover:border-brand-blue/20 transition-all group">
-              <div className="flex items-center justify-between mb-3">
-                <Badge status={p.status} />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  #{p.id.slice(-6)}
-                </span>
-              </div>
-              
-              <div className="flex items-center gap-4">
-                <div className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
-                  p.type === 'FGTS' ? "bg-brand-orange/10 text-brand-orange" : "bg-brand-blue/10 text-brand-blue"
-                )}>
-                  <FileText size={24} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-slate-900 truncate uppercase text-sm">
-                    {p.type === 'FGTS' ? 'Antecipação FGTS' : 
-                     p.type === 'CONSIGNADO' ? 'Consignado INSS' : 
-                     p.type === 'PESSOAL' ? 'Crédito Pessoal' : 
-                     p.type === 'CLT' ? 'Crédito CLT' : 
-                     p.type === 'CARTAO' ? 'Saque Cartão' :
-                     p.type === 'LUZ' ? 'Crédito na Luz' : p.type}
-                  </div>
-                  <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                    <span className="font-bold text-brand-blue">R$ {p.value.toLocaleString('pt-BR')}</span>
-                    <span>•</span>
-                    <span>{new Date(p.createdAt).toLocaleDateString('pt-BR')}</span>
+          filteredProposals.map((p) => (
+            <Card key={p.id} className="overflow-visible border-slate-100/60 shadow-sm hover:shadow-md transition-shadow">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <Badge status={p.status} />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider font-mono">
+                      #{p.id.slice(-6)}
+                    </span>
+                    {user.role === 'admin' && (
+                      <button 
+                        onClick={() => handleDelete(p.id)}
+                        disabled={isDeleting === p.id}
+                        className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-slate-300 group-hover:text-brand-blue transition-colors" />
-              </div>
+                
+                <div className="flex items-center gap-4">
+                  <div className={cn(
+                    "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
+                    p.type === 'FGTS' ? "bg-brand-orange/10 text-brand-orange" : "bg-brand-blue/10 text-brand-blue"
+                  )}>
+                    <FileText size={24} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-900 truncate uppercase text-xs">
+                      {p.type === 'FGTS' ? 'Antecipação FGTS' : 
+                       p.type === 'CONSIGNADO' ? 'Consignado INSS' : 
+                       p.type === 'PESSOAL' ? 'Crédito Pessoal' : 
+                       p.type === 'CLT' ? 'Crédito CLT' : 
+                       p.type === 'CARTAO' ? 'Saque Cartão' :
+                       p.type === 'LUZ' ? 'Crédito na Luz' : p.type}
+                    </div>
+                    <div className="text-sm font-bold text-brand-blue mt-0.5">
+                      R$ {p.value.toLocaleString('pt-BR')}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1">
+                      {new Date(p.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-200" />
+                </div>
 
-              {user.role === 'admin' && (
-                <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-800">
-                      {(p as any).userName || 'Cliente Desconhecido'}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {(p as any).userEmail || 'Sem e-mail'}
-                    </span>
+                {user.role === 'admin' && (
+                  <div className="mt-4 pt-4 border-t border-slate-50">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-800">
+                          {(p as any).userName || 'Cliente'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {(p as any).userEmail || ''}
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(`Olá ${(p as any).userName || ''}, vi sua simulação de R$ ${p.value.toLocaleString('pt-BR')} no App Realcred.`)}`, '_blank')}
+                        className="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5"
+                      >
+                        <MessageSquare size={12} /> WHATSAPP
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                       <button 
+                        onClick={() => handleUpdateStatus(p.id, 'IN_PROGRESS')}
+                        className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md text-[9px] font-bold border border-indigo-100"
+                      >
+                        ANDAMENTO
+                      </button>
+                      <button 
+                        onClick={() => handleUpdateStatus(p.id, 'APPROVED')}
+                        className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md text-[9px] font-bold border border-emerald-100"
+                      >
+                        APROVAR
+                      </button>
+                      <button 
+                        onClick={() => handleUpdateStatus(p.id, 'COMPLETED')}
+                        className="bg-cyan-50 text-cyan-700 px-2 py-1 rounded-md text-[9px] font-bold border border-cyan-100"
+                      >
+                        ATENDIDO
+                      </button>
+                      <button 
+                        onClick={() => handleUpdateStatus(p.id, 'REJECTED')}
+                        className="bg-rose-50 text-rose-700 px-2 py-1 rounded-md text-[9px] font-bold border border-rose-100"
+                      >
+                        RECUSAR
+                      </button>
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => window.open(`https://wa.me/5527999018523`, '_blank')}
-                    className="text-[10px] font-bold text-brand-blue hover:underline"
-                  >
-                    CONTATAR
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
             </Card>
           ))
         )}
