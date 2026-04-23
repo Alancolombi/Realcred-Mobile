@@ -14,10 +14,10 @@ async function testResend() {
   const resend = new Resend(key);
   try {
     const { data, error } = await resend.emails.send({
-      from: 'Realcred <onboarding@resend.dev>',
+      from: 'Realcred App <notificacoes@alancolombiagencia.com.br>',
       to: ['realcred.pc@gmail.com'],
-      subject: 'Teste de Conexão - Realcred',
-      html: '<p>Teste de envio direto do servidor via script de diagnóstico.</p>'
+      subject: 'Teste de Conexão com Domínio Próprio - Realcred',
+      html: '<p>Teste de envio direto do servidor usando o domínio alancolombiagencia.com.br.</p>'
     });
 
     if (error) {

@@ -72,34 +72,18 @@ async function startServer() {
       const { data, error } = await resendClient.emails.send({
         from: 'Realcred App <notificacoes@alancolombiagencia.com.br>',
         to: ['realcred.pc@gmail.com'],
-        subject: `Nova Proposta: ${user?.displayName || 'Cliente'}`,
+        cc: [user?.email].filter(Boolean) as string[],
+        subject: `Simulação de Crédito - ${user?.displayName || 'Cliente'}`,
         html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
-            <div style="background-color: #2563eb; padding: 32px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px; letter-spacing: -0.025em;">Nova Solicitação de Crédito</h1>
-            </div>
-            
-            <div style="padding: 32px; background-color: #ffffff;">
-              <p style="font-size: 16px; line-height: 1.5; color: #475569;">Olá Equipe Realcred,</p>
-              <p style="font-size: 16px; line-height: 1.5; color: #475569;">Uma nova simulação foi finalizada no aplicativo. Confira os detalhes abaixo:</p>
-              
-              <div style="background-color: #f8fafc; padding: 24px; border-radius: 12px; margin: 24px 0; border: 1px solid #f1f5f9;">
-                <h2 style="margin: 0 0 16px 0; font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Dados do Cliente</h2>
-                <p style="margin: 8px 0; font-size: 16px;"><strong>Nome:</strong> ${user?.displayName || 'Não identificado'}</p>
-                <p style="margin: 8px 0; font-size: 16px;"><strong>Email:</strong> ${user?.email || 'Não informado'}</p>
-              </div>
-
-              <div style="background-color: #f0f9ff; padding: 24px; border-radius: 12px; margin: 24px 0; border: 1px solid #e0f2fe;">
-                <h2 style="margin: 0 0 16px 0; font-size: 14px; color: #0369a1; text-transform: uppercase; letter-spacing: 0.05em;">Detalhes da Proposta</h2>
-                <p style="margin: 8px 0; font-size: 16px;"><strong>Modalidade:</strong> ${simulation.type || 'N/A'}</p>
-                <p style="margin: 8px 0; font-size: 24px; color: #2563eb;"><strong>Valor: R$ ${formattedValue}</strong></p>
-                <p style="margin: 8px 0; font-size: 14px; color: #64748b;"><strong>Data:</strong> ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>
-              </div>
-
-              <div style="text-align: center; margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 24px;">
-                <p style="font-size: 12px; color: #94a3b8; margin: 0;">Este é um aviso automático do Sistema Realcred.</p>
-              </div>
-            </div>
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #2563eb;">Nova Simulação Recebida</h2>
+            <p><strong>Cliente:</strong> ${user?.displayName || 'Não informado'}</p>
+            <p><strong>Email:</strong> ${user?.email || 'Não informado'}</p>
+            <p><strong>Modalidade:</strong> ${simulation.type || 'N/A'}</p>
+            <p><strong>Valor: R$ ${formattedValue}</strong></p>
+            <p><strong>Data:</strong> ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>
+            <hr />
+            <p style="font-size: 12px; color: #666;">Enviado via alancolombiagencia.com.br</p>
           </div>
         `,
       });
