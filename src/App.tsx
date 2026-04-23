@@ -326,16 +326,16 @@ const Dashboard = ({ user }: { user: AppUser }) => {
       <section>
         <h3 className="font-bold text-slate-800 mb-4">O que você precisa hoje?</h3>
         <div className="grid grid-cols-2 gap-4">
-          <Link to="/new-proposal">
-            <Card className="p-4 flex flex-col items-center text-center gap-2 hover:bg-slate-50 transition-colors">
+          <Link to="/new-proposal" className="block">
+            <Card className="p-4 h-full flex flex-col items-center text-center gap-2 hover:bg-slate-50 transition-colors">
               <div className="w-10 h-10 rounded-full bg-brand-blue/10 text-brand-blue flex items-center justify-center">
                 <Calculator size={20} />
               </div>
               <span className="text-xs font-bold text-slate-700">Solicitar Crédito</span>
             </Card>
           </Link>
-          <button onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')}>
-            <Card className="p-4 flex flex-col items-center text-center gap-2 hover:bg-slate-50 transition-colors">
+          <button onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')} className="block">
+            <Card className="p-4 h-full flex flex-col items-center text-center gap-2 hover:bg-slate-50 transition-colors">
               <div className="w-10 h-10 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center">
                 <MessageSquare size={20} />
               </div>
@@ -344,6 +344,14 @@ const Dashboard = ({ user }: { user: AppUser }) => {
           </button>
         </div>
       </section>
+
+      {/* Observation Notice */}
+      <div className="flex items-center gap-2 px-2 py-3 bg-slate-100/50 rounded-xl border border-slate-200/50">
+        <Info size={14} className="text-slate-400 shrink-0" />
+        <p className="text-[10px] text-slate-500 font-medium leading-tight">
+          Obs: Os valores apresentados nas simulações podem sofrer alterações conforme a análise de crédito individual.
+        </p>
+      </div>
     </div>
   );
 };
