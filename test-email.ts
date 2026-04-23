@@ -15,7 +15,7 @@ async function testResend() {
   try {
     const { data, error } = await resend.emails.send({
       from: 'Realcred App <notificacoes@alancolombiagencia.com.br>',
-      to: ['realcred.pc@gmail.com'],
+      to: ['alancolombi@realcred.net.br'],
       subject: 'Teste de Conexão com Domínio Próprio - Realcred',
       html: '<p>Teste de envio direto do servidor usando o domínio alancolombiagencia.com.br.</p>'
     });
