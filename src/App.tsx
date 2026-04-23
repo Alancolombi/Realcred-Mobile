@@ -134,7 +134,8 @@ const Login = () => {
       const userDoc = await getDoc(userRef);
       
       if (!userDoc.exists()) {
-        const isAdmin = user.email === 'alancolombi30@gmail.com';
+        const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
+        const isAdmin = adminEmails.includes(user.email || '');
         await setDoc(userRef, {
           uid: user.uid,
           displayName: user.displayName,
@@ -853,13 +854,32 @@ const Proposals = ({ user }: { user: AppUser }) => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const lastCountRef = React.useRef<number>(0);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Inicializar áudio de notificação
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
   }, []);
+
+  const sendNotification = (title: string, body: string) => {
+    if (audioRef.current) {
+      audioRef.current.play().catch(e => console.log('Audio blocked', e));
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.showNotification(title, {
+          body,
+          icon: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
+          badge: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
+          vibrate: [200, 100, 200],
+          tag: 'realcred-update',
+          renotify: true
+        } as any);
+      });
+    } else if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body, icon: '/favicon.ico' });
+    }
+  };
 
   useEffect(() => {
     const proposalsRef = collection(db, 'proposals');
@@ -873,33 +893,18 @@ const Proposals = ({ user }: { user: AppUser }) => {
         ...doc.data()
       })) as Proposal[];
       
-      // Notificação para Admin quando chega nova proposta
-      // Só dispara se já tiver carregado a lista inicial (loading === false)
-      if (user.role === 'admin' && !loading && lastCountRef.current > 0 && proposalsData.length > lastCountRef.current) {
-        if (audioRef.current) {
-          audioRef.current.play().catch(e => console.log('Audio blocked', e));
-        }
-
-        // Tentar notificação via Service Worker (mais confiável para PWA/Mobile)
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.ready.then(registration => {
-            registration.showNotification("Realcred: Nova Simulação!", {
-              body: `Nova proposta de ${proposalsData[0].type} recebida de ${(proposalsData[0] as any).userName || 'Cliente'}.`,
-              icon: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
-              badge: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
-              vibrate: [200, 100, 200],
-              tag: 'new-proposal'
-            } as any);
-          });
-        } else if ("Notification" in window && Notification.permission === "granted") {
-          new Notification("Realcred: Nova Simulação!", {
-            body: `Nova proposta de ${proposalsData[0].type} recebida.`,
-            icon: '/favicon.ico'
-          });
-        }
+      if (user.role === 'admin' && !loading) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const data = change.doc.data() as Proposal;
+            sendNotification(
+              "Realcred: Nova Simulação!", 
+              `Nova proposta de ${(data as any).userName || 'Cliente'} (R$ ${data.value.toLocaleString('pt-BR')})`
+            );
+          }
+        });
       }
       
-      lastCountRef.current = proposalsData.length;
       setProposals(proposalsData);
       setLoading(false);
     });
@@ -969,21 +974,30 @@ const Proposals = ({ user }: { user: AppUser }) => {
             </p>
           </div>
           {user.role === 'admin' && (
-            <button 
-              onClick={requestNotificationPermission}
-              className={cn(
-                "p-2 rounded-xl border shadow-sm transition-all flex items-center gap-2",
-                "Notification" in window && Notification.permission === "granted"
-                  ? "text-emerald-600 bg-emerald-50 border-emerald-100"
-                  : "text-slate-400 bg-white border-slate-100 hover:text-brand-blue"
-              )}
-              title={ "Notification" in window && Notification.permission === "granted" ? "Notificações Ativas" : "Ativar Notificações" }
-            >
-              <Bell size={20} />
-              <span className="text-[10px] font-bold">
-                {"Notification" in window && Notification.permission === "granted" ? "ATIVAS" : "ATIVAR"}
-              </span>
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => sendNotification("Realcred: Teste de Notificação", "As notificações estão funcionando corretamente!")}
+                className="p-2 text-slate-400 hover:text-brand-orange bg-white rounded-xl border border-slate-100 shadow-sm"
+                title="Testar Notificação"
+              >
+                <RotateCcw size={20} />
+              </button>
+              <button 
+                onClick={requestNotificationPermission}
+                className={cn(
+                  "p-2 rounded-xl border shadow-sm transition-all flex items-center gap-2",
+                  "Notification" in window && Notification.permission === "granted"
+                    ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+                    : "text-slate-400 bg-white border-slate-100 hover:text-brand-blue"
+                )}
+                title={ "Notification" in window && Notification.permission === "granted" ? "Notificações Ativas" : "Ativar Notificações" }
+              >
+                <Bell size={20} />
+                <span className="text-[10px] font-bold">
+                  {"Notification" in window && Notification.permission === "granted" ? "ATIVAS" : "ATIVAR"}
+                </span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -1194,8 +1208,10 @@ export default function App() {
         
         if (userDoc.exists()) {
           const userData = userDoc.data() as AppUser;
-          // Garantir que o dono (você) seja sempre Admin para gestão
-          if (firebaseUser.email === 'alancolombi30@gmail.com' && userData.role !== 'admin') {
+          const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
+          const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
+          
+          if (shouldBeAdmin && userData.role !== 'admin') {
             const updatedUser = { ...userData, role: 'admin' as const };
             await setDoc(userRef, updatedUser);
             setUser(updatedUser);
@@ -1203,11 +1219,12 @@ export default function App() {
             setUser(userData);
           }
         } else {
+          const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
           const newUser: AppUser = {
             uid: firebaseUser.uid,
             displayName: firebaseUser.displayName,
             email: firebaseUser.email,
-            role: firebaseUser.email === 'alancolombi30@gmail.com' ? 'admin' : 'client',
+            role: adminEmails.includes(firebaseUser.email || '') ? 'admin' : 'client',
             createdAt: new Date().toISOString(),
           };
           setUser(newUser);
