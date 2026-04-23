@@ -115,11 +115,12 @@ const Login = () => {
       const userDoc = await getDoc(userRef);
       
       if (!userDoc.exists()) {
+        const isAdmin = user.email === 'alancolombi30@gmail.com';
         await setDoc(userRef, {
           uid: user.uid,
           displayName: user.displayName,
           email: user.email,
-          role: 'client',
+          role: isAdmin ? 'admin' : 'client',
           createdAt: new Date().toISOString(),
         });
       }
@@ -182,11 +183,11 @@ const Dashboard = ({ user }: { user: AppUser }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'proposals'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
+    const proposalsRef = collection(db, 'proposals');
+    // Adição: Admin vê todas as propostas no dashboard também
+    const q = user.role === 'admin'
+      ? query(proposalsRef, orderBy('createdAt', 'desc'))
+      : query(proposalsRef, where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const proposalsData = snapshot.docs.map(doc => ({
@@ -198,9 +199,9 @@ const Dashboard = ({ user }: { user: AppUser }) => {
     });
 
     return () => unsubscribe();
-  }, [user.uid]);
+  }, [user.uid, user.role]);
 
-  const totalRequested = proposals.reduce((acc, p) => acc + p.value, 0);
+  const totalRequested = proposals.reduce((acc, p) => acc + (Number(p.value) || 0), 0);
   const paidProposalsCount = proposals.filter(p => p.status === 'PAID').length;
 
   if (loading) {
@@ -220,7 +221,14 @@ const Dashboard = ({ user }: { user: AppUser }) => {
       <header className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Olá, {user.displayName?.split(' ')[0]}</h2>
-          <p className="text-sm text-slate-500">Acompanhe suas solicitações</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-sm text-slate-500">Acompanhe as solicitações</p>
+            {user.role === 'admin' && (
+              <span className="bg-brand-blue text-white text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider animate-pulse">
+                Modo Admin
+              </span>
+            )}
+          </div>
         </div>
         <button className="relative p-2 text-slate-400 hover:text-brand-blue transition-colors">
           <Bell size={24} />
@@ -267,13 +275,18 @@ const Dashboard = ({ user }: { user: AppUser }) => {
                     <FileText size={24} />
                   </div>
                   <div>
-                    <div className="font-bold text-slate-900">
+                    <div className="font-bold text-slate-900 truncate text-sm">
                       {p.type === 'FGTS' ? 'Antecipação FGTS' : 
                        p.type === 'CONSIGNADO' ? 'Consignado INSS' : 
                        p.type === 'PESSOAL' ? 'Crédito Pessoal' : 
                        p.type === 'CLT' ? 'Crédito CLT' : p.type}
                     </div>
-                    <div className="text-xs text-slate-500">
+                    {user.role === 'admin' && (
+                      <div className="text-[10px] text-slate-400 font-bold truncate">
+                        {(p as any).userName || 'Cliente'} • {(p as any).userEmail || ''}
+                      </div>
+                    )}
+                    <div className="text-xs text-slate-500 mt-0.5">
                       R$ {p.value.toLocaleString('pt-BR')} • {new Date(p.createdAt).toLocaleDateString('pt-BR')}
                     </div>
                   </div>
@@ -938,7 +951,7 @@ const Layout = ({ children, user }: { children: React.ReactNode; user: AppUser }
   const navItems = [
     { icon: LayoutDashboard, label: 'Início', path: '/' },
     { icon: Calculator, label: 'Simular', path: '/simulator' },
-    { icon: FileText, label: 'Propostas', path: '/proposals' },
+    { icon: FileText, label: user.role === 'admin' ? 'Gestão' : 'Propostas', path: '/proposals' },
     { icon: HelpCircle, label: 'Ajuda', path: '/help' },
     { icon: UserIcon, label: 'Perfil', path: '/profile' },
   ];
@@ -1049,7 +1062,12 @@ export default function App() {
                     {user.displayName?.[0]}
                   </div>
                   <div className="text-center">
-                    <div className="font-bold text-lg">{user.displayName}</div>
+                    <div className="font-bold text-lg flex items-center justify-center gap-2">
+                      {user.displayName}
+                      {user.role === 'admin' && (
+                        <span className="bg-brand-blue text-white text-[8px] px-1.5 py-0.5 rounded uppercase">Admin</span>
+                      )}
+                    </div>
                     <div className="text-sm text-slate-500">{user.email}</div>
                   </div>
                   <Button variant="outline" className="w-full mt-4" onClick={() => signOut(auth)}>
