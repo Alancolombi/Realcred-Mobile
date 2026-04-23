@@ -621,7 +621,18 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
 
       await addDoc(collection(db, 'proposals'), proposalData);
 
-      // Notificar admin via e-mail
+      // Notificar via WhatsApp automaticamente
+      const typeLabels: Record<string, string> = {
+        FGTS: 'Antecipação FGTS',
+        CONSIGNADO: 'Consignado INSS',
+        PESSOAL: 'Crédito Pessoal',
+        CLT: 'Crédito CLT',
+        CARTAO: 'Cartão de Crédito',
+        LUZ: 'Energia'
+      };
+      const text = `Olá! Acabei de enviar uma proposta pelo App Realcred:\n\n*Cliente:* ${user.displayName || 'Não informado'}\n*Modalidade:* ${typeLabels[type] || type}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n\nFico no aguardo do contato para finalizar!`;
+      
+      // Notificar admin via e-mail (Mantido como backup, caso o DNS propague)
       try {
         console.log('[Email] Enviando proposta para o servidor...', proposalData);
         const response = await fetch('/api/notify-simulation', {
@@ -646,6 +657,9 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       } catch (err) {
         console.warn('[Email] Erro de rede ou servidor ao notificar:', err);
       }
+      
+      // Abrir WhatsApp
+      window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(text)}`, '_blank');
       
       setStep(3);
     } catch (error) {
@@ -756,7 +770,10 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
                   Enviando...
                 </>
               ) : (
-                'Enviar Proposta'
+                <>
+                  <MessageSquare size={18} className="mr-2" />
+                  Enviar e Falar no WhatsApp
+                </>
               )}
             </Button>
           </motion.div>

@@ -27,18 +27,6 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Debug Route
-  app.get('/api/debug-email', (req, res) => {
-    const key = process.env.RESEND_API_KEY;
-    res.json({
-      resendInitialized: !!resend,
-      envKeyFound: !!key,
-      keyPrefix: key ? `${key.substring(0, 7)}...` : 'not found',
-      nodeEnv: process.env.NODE_ENV,
-      timestamp: new Date().toISOString()
-    });
-  });
-
   // API Routes
   app.post('/api/notify-simulation', async (req, res) => {
     try {
