@@ -55,7 +55,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 
-// --- Components ---
+const WHATSAPP_NUMBER = '5527999018502';
 
 const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' | 'ghost' }>(
   ({ className, variant = 'primary', ...props }, ref) => {
@@ -334,7 +334,7 @@ const Dashboard = ({ user }: { user: AppUser }) => {
               <span className="text-xs font-bold text-slate-700">Solicitar Crédito</span>
             </Card>
           </Link>
-          <button onClick={() => window.open('https://wa.me/5527999018523', '_blank')}>
+          <button onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')}>
             <Card className="p-4 flex flex-col items-center text-center gap-2 hover:bg-slate-50 transition-colors">
               <div className="w-10 h-10 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center">
                 <MessageSquare size={20} />
@@ -457,7 +457,7 @@ const Help = () => {
           <Button 
             variant="secondary" 
             className="w-full shadow-lg shadow-black/20"
-            onClick={() => window.open('https://wa.me/5527999018523', '_blank')}
+            onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')}
           >
             Falar com Especialista
           </Button>
@@ -514,7 +514,7 @@ const Simulator = () => {
       CLT: 'Crédito CLT'
     };
     const text = `Olá! Fiz uma simulação no App Realcred:\n\n*Modalidade:* ${typeLabels[type]}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n*Prazo:* ${installments} meses\n\nGostaria de prosseguir com a contratação!`;
-    window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const { monthly, total } = calculateResult();
@@ -716,7 +716,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       }
       
       // Abrir WhatsApp
-      window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(text)}`, '_blank');
+      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, '_blank');
       
       setStep(3);
     } catch (error) {
@@ -735,7 +735,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       CLT: 'Crédito CLT'
     };
     const text = `Olá! Acabei de enviar uma proposta pelo App Realcred:\n\n*Modalidade:* ${typeLabels[type]}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n\nFico no aguardo do contato para finalizar!`;
-    window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
@@ -1158,7 +1158,7 @@ const Proposals = ({ user }: { user: AppUser }) => {
                         </span>
                       </div>
                       <button 
-                        onClick={() => window.open(`https://wa.me/5527999018523?text=${encodeURIComponent(`Olá ${(p as any).userName || ''}, vi sua simulação de R$ ${p.value.toLocaleString('pt-BR')} no App Realcred.`)}`, '_blank')}
+                        onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Olá ${(p as any).userName || ''}, vi sua simulação de R$ ${p.value.toLocaleString('pt-BR')} no App Realcred.`)}`, '_blank')}
                         className="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5"
                       >
                         <MessageSquare size={12} /> WHATSAPP
