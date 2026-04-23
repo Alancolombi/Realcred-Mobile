@@ -611,9 +611,11 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       
       const proposalData = {
         userId: user.uid,
+        userName: user.displayName,
+        userEmail: user.email,
         type,
         value: amount,
-        installments: 12, // Default ou poderia ser extraído de uma nova etapa
+        installments: 12,
         status: 'ANALYSIS',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -813,6 +815,122 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   );
 };
 
+const Proposals = ({ user }: { user: AppUser }) => {
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const proposalsRef = collection(db, 'proposals');
+    const q = user.role === 'admin' 
+      ? query(proposalsRef, orderBy('createdAt', 'desc'))
+      : query(proposalsRef, where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const proposalsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Proposal[];
+      setProposals(proposalsData);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user.uid, user.role]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+          className="w-8 h-8 border-3 border-brand-blue border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 pb-20">
+      <header>
+        <h2 className="text-2xl font-bold text-slate-900">
+          {user.role === 'admin' ? 'Gestão de Propostas' : 'Minhas Propostas'}
+        </h2>
+        <p className="text-sm text-slate-500">
+          {user.role === 'admin' 
+            ? `Total de ${proposals.length} simulações registradas.` 
+            : 'Histórico de todas as suas solicitações.'}
+        </p>
+      </header>
+
+      <div className="space-y-3">
+        {proposals.length === 0 ? (
+          <Card className="p-12 text-center bg-slate-50 border-dashed">
+            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+              <FileText size={32} />
+            </div>
+            <p className="text-slate-400 text-sm font-medium">Nenhuma proposta encontrada.</p>
+          </Card>
+        ) : (
+          proposals.map((p) => (
+            <Card key={p.id} className="p-4 hover:border-brand-blue/20 transition-all group">
+              <div className="flex items-center justify-between mb-3">
+                <Badge status={p.status} />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  #{p.id.slice(-6)}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
+                  p.type === 'FGTS' ? "bg-brand-orange/10 text-brand-orange" : "bg-brand-blue/10 text-brand-blue"
+                )}>
+                  <FileText size={24} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-slate-900 truncate uppercase text-sm">
+                    {p.type === 'FGTS' ? 'Antecipação FGTS' : 
+                     p.type === 'CONSIGNADO' ? 'Consignado INSS' : 
+                     p.type === 'PESSOAL' ? 'Crédito Pessoal' : 
+                     p.type === 'CLT' ? 'Crédito CLT' : 
+                     p.type === 'CARTAO' ? 'Saque Cartão' :
+                     p.type === 'LUZ' ? 'Crédito na Luz' : p.type}
+                  </div>
+                  <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                    <span className="font-bold text-brand-blue">R$ {p.value.toLocaleString('pt-BR')}</span>
+                    <span>•</span>
+                    <span>{new Date(p.createdAt).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-slate-300 group-hover:text-brand-blue transition-colors" />
+              </div>
+
+              {user.role === 'admin' && (
+                <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-slate-800">
+                      {(p as any).userName || 'Cliente Desconhecido'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {(p as any).userEmail || 'Sem e-mail'}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => window.open(`https://wa.me/5527999018523`, '_blank')}
+                    className="text-[10px] font-bold text-brand-blue hover:underline"
+                  >
+                    CONTATAR
+                  </button>
+                </div>
+              )}
+            </Card>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 const Layout = ({ children, user }: { children: React.ReactNode; user: AppUser }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -867,16 +985,24 @@ export default function App() {
         const userDoc = await getDoc(userRef);
         
         if (userDoc.exists()) {
-          setUser(userDoc.data() as AppUser);
+          const userData = userDoc.data() as AppUser;
+          // Garantir que o dono (você) seja sempre Admin para gestão
+          if (firebaseUser.email === 'alancolombi30@gmail.com' && userData.role !== 'admin') {
+            const updatedUser = { ...userData, role: 'admin' as const };
+            await setDoc(userRef, updatedUser);
+            setUser(updatedUser);
+          } else {
+            setUser(userData);
+          }
         } else {
-          // Fallback: Se o documento ainda não existir (usuário novo em processo de criação)
-          // setamos um estado parcial para permitir a navegação sem exigir refresh
-          setUser({
+          const newUser: AppUser = {
             uid: firebaseUser.uid,
             displayName: firebaseUser.displayName,
             email: firebaseUser.email,
-            role: 'client',
-          } as AppUser);
+            role: firebaseUser.email === 'alancolombi30@gmail.com' ? 'admin' : 'client',
+            createdAt: new Date().toISOString(),
+          };
+          setUser(newUser);
         }
       } else {
         setUser(null);
@@ -911,7 +1037,7 @@ export default function App() {
             <Route path="/" element={<Layout user={user}><Dashboard user={user} /></Layout>} />
             <Route path="/simulator" element={<Layout user={user}><Simulator /></Layout>} />
             <Route path="/new-proposal" element={<Layout user={user}><ProposalFlow user={user} /></Layout>} />
-            <Route path="/proposals" element={<Layout user={user}><div className="text-center py-20 text-slate-400 font-medium">Lista de propostas em breve...</div></Layout>} />
+            <Route path="/proposals" element={<Layout user={user}><Proposals user={user} /></Layout>} />
             <Route path="/help" element={<Layout user={user}><Help /></Layout>} />
             <Route path="/profile" element={<Layout user={user}>
               <div className="space-y-6">
