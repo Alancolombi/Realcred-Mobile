@@ -1,6 +1,6 @@
 {
-  "name": "Realcred Mobile",
-  "description": "Plataforma de soluções financeiras para crédito consignado, antecipação de FGTS e empréstimos.",
+  "name": "Realcred",
+  "description": "App para simulação e gestão de crédito da Realcred. Notificações em tempo real para novos pedidos.",
   "requestFramePermissions": [
     "camera"
   ]

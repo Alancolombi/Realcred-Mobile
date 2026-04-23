@@ -879,7 +879,19 @@ const Proposals = ({ user }: { user: AppUser }) => {
         if (audioRef.current) {
           audioRef.current.play().catch(e => console.log('Audio blocked', e));
         }
-        if ("Notification" in window && Notification.permission === "granted") {
+
+        // Tentar notificação via Service Worker (mais confiável para PWA/Mobile)
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(registration => {
+            registration.showNotification("Realcred: Nova Simulação!", {
+              body: `Nova proposta de ${proposalsData[0].type} recebida de ${(proposalsData[0] as any).userName || 'Cliente'}.`,
+              icon: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
+              badge: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
+              vibrate: [200, 100, 200],
+              tag: 'new-proposal'
+            } as any);
+          });
+        } else if ("Notification" in window && Notification.permission === "granted") {
           new Notification("Realcred: Nova Simulação!", {
             body: `Nova proposta de ${proposalsData[0].type} recebida.`,
             icon: '/favicon.ico'
@@ -959,10 +971,18 @@ const Proposals = ({ user }: { user: AppUser }) => {
           {user.role === 'admin' && (
             <button 
               onClick={requestNotificationPermission}
-              className="p-2 text-slate-400 hover:text-brand-blue bg-white rounded-xl border border-slate-100 shadow-sm"
-              title="Ativar Notificações"
+              className={cn(
+                "p-2 rounded-xl border shadow-sm transition-all flex items-center gap-2",
+                "Notification" in window && Notification.permission === "granted"
+                  ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+                  : "text-slate-400 bg-white border-slate-100 hover:text-brand-blue"
+              )}
+              title={ "Notification" in window && Notification.permission === "granted" ? "Notificações Ativas" : "Ativar Notificações" }
             >
               <Bell size={20} />
+              <span className="text-[10px] font-bold">
+                {"Notification" in window && Notification.permission === "granted" ? "ATIVAS" : "ATIVAR"}
+              </span>
             </button>
           )}
         </div>
