@@ -623,6 +623,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
 
       // Notificar admin via e-mail
       try {
+        console.log('[Email] Enviando proposta para o servidor...', proposalData);
         const response = await fetch('/api/notify-simulation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

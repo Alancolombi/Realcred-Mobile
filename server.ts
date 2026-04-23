@@ -42,8 +42,15 @@ async function startServer() {
   // API Routes
   app.post('/api/notify-simulation', async (req, res) => {
     try {
+      console.log('[Email] Recebido POST em /api/notify-simulation');
+      console.log('[Email] Body:', JSON.stringify(req.body, null, 2));
+      
       const { user, simulation } = req.body;
-      console.log(`[Email] Iniciando tentativa de notificação para: ${user?.email || 'Desconhecido'}`);
+      
+      if (!user) {
+        console.error('[Email] Erro: Dados do usuário ausentes no body.');
+        return res.status(400).json({ success: false, error: 'Dados do usuário ausentes' });
+      }
 
       // Re-verificar API Key se resend estiver nulo
       const currentKey = process.env.RESEND_API_KEY?.trim();
@@ -60,30 +67,40 @@ async function startServer() {
 
       // Validação básica dos dados recebidos
       if (!simulation || typeof simulation.value === 'undefined') {
-        throw new Error('Dados da simulação incompletos.');
+        console.error('[Email] Erro: Dados da simulação incompletos.');
+        return res.status(400).json({ success: false, error: 'Dados da simulação incompletos' });
       }
 
-      const formattedValue = typeof simulation.value === 'number' 
-        ? simulation.value.toLocaleString('pt-BR') 
-        : simulation.value;
+      const rawValue = simulation.value;
+      const formattedValue = typeof rawValue === 'number' 
+        ? rawValue.toLocaleString('pt-BR') 
+        : rawValue;
 
-      console.log(`[Email] Tentando enviar para realcred.pc@gmail.com com key: ${currentKey?.substring(0, 7)}...`);
+      let dateString;
+      try {
+        dateString = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      } catch (e) {
+        dateString = new Date().toISOString();
+      }
+
+      console.log(`[Email] Tentando enviar notificação. Remetente: notificacoes@alancolombiagencia.com.br`);
 
       const { data, error } = await resendClient.emails.send({
-        from: 'Realcred App <notificacoes@alancolombiagencia.com.br>',
+        from: 'Realcred <notificacoes@alancolombiagencia.com.br>',
         to: ['realcred.pc@gmail.com'],
-        cc: [user?.email].filter(Boolean) as string[],
-        subject: `Simulação de Crédito - ${user?.displayName || 'Cliente'}`,
+        bcc: ['alancolombi30@gmail.com'], // Enviar cópia oculta para o seu e-mail pessoal para teste
+        subject: `Nova Proposta Realcred - ${user.displayName || 'Cliente'}`,
         html: `
-          <div style="font-family: sans-serif; padding: 20px; color: #333;">
-            <h2 style="color: #2563eb;">Nova Simulação Recebida</h2>
-            <p><strong>Cliente:</strong> ${user?.displayName || 'Não informado'}</p>
-            <p><strong>Email:</strong> ${user?.email || 'Não informado'}</p>
-            <p><strong>Modalidade:</strong> ${simulation.type || 'N/A'}</p>
-            <p><strong>Valor: R$ ${formattedValue}</strong></p>
-            <p><strong>Data:</strong> ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>
+          <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+            <h2 style="color: #2563eb;">Nova Solicitação de Crédito</h2>
+            <p><strong>Nome:</strong> ${user.displayName || 'Não informado'}</p>
+            <p><strong>E-mail do Cliente:</strong> ${user.email || 'Não informado'}</p>
             <hr />
-            <p style="font-size: 12px; color: #666;">Enviado via alancolombiagencia.com.br</p>
+            <p><strong>Modalidade:</strong> ${simulation.type || 'N/A'}</p>
+            <p style="font-size: 20px;"><strong>Valor: R$ ${formattedValue}</strong></p>
+            <p><strong>Data da Solicitação:</strong> ${dateString}</p>
+            <br />
+            <p style="font-size: 12px; color: #666;">Notificação automática via alancolombiagencia.com.br</p>
           </div>
         `,
       });
@@ -93,10 +110,10 @@ async function startServer() {
         return res.status(200).json({ success: false, error: error.message, detail: error });
       }
 
-      console.log(`[Email] Sucesso! Notificação enviada. ID: ${data?.id}`);
+      console.log(`[Email] Sucesso! ID do Envio: ${data?.id}`);
       res.status(200).json({ success: true, data });
     } catch (err: any) {
-      console.error('[Email] Erro fatal no servidor:', err);
+      console.error('[Email] Erro interno crítico:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
