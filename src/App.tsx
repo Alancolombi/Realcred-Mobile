@@ -625,22 +625,39 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   const [step, setStep] = useState(1);
   const [type, setType] = useState('FGTS');
   const [amount, setAmount] = useState(1000);
+  const [phone, setPhone] = useState(user.phone || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const handleNextToStep2 = () => {
-    setStep(2);
+  const sanitizePhone = (p: string) => {
+    const cleaned = p.replace(/\D/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 11 && !cleaned.startsWith('55')) {
+      return '55' + cleaned;
+    }
+    return cleaned;
   };
 
   const handleSubmitProposal = async () => {
+    const sanitizedPhone = sanitizePhone(phone);
+    if (!sanitizedPhone || sanitizedPhone.length < 10) {
+      alert('Por favor, informe seu número de WhatsApp com DDD');
+      setStep(1.5);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       
+      if (sanitizedPhone && sanitizedPhone !== user.phone) {
+        await updateDoc(doc(db, 'users', user.uid), { phone: sanitizedPhone });
+      }
+
       const proposalData = {
         userId: user.uid,
         userName: user.displayName,
         userEmail: user.email,
-        userPhone: user.phone || '', // Store user phone for the manager to see
+        userPhone: sanitizedPhone,
         type,
         value: amount,
         installments: 12,
@@ -660,10 +677,10 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
         CARTAO: 'Cartão de Crédito',
         LUZ: 'Energia'
       };
-      const text = `Olá! Acabei de enviar uma proposta pelo App Realcred:\n\n*Cliente:* ${user.displayName || 'Não informado'}\n*Modalidade:* ${typeLabels[type] || type}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n\nFico no aguardo do contato para finalizar!`;
+      const messageBody = `Olá! Acabei de enviar uma proposta pelo App Realcred:\n\n*Cliente:* ${user.displayName || 'Não informado'}\n*Telefone:* ${sanitizedPhone}\n*Modalidade:* ${typeLabels[type] || type}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n\nFico no aguardo do contato para finalizar!`;
       
       // Abrir WhatsApp com destino ao Gestor
-      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, '_blank');
+      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(messageBody)}`, '_blank');
       
       setStep(3);
     } catch (error) {
@@ -724,7 +741,37 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
                 </Card>
               ))}
             </div>
-            <Button className="w-full py-4 mt-4" onClick={() => setStep(2)}>Próximo Passo</Button>
+            <Button className="w-full py-4 mt-4" onClick={() => setStep(1.5)}>Próximo Passo</Button>
+          </motion.div>
+        )}
+
+        {step === 1.5 && (
+          <motion.div 
+            key="step1.5"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <h3 className="font-bold text-slate-800">Seu contato para retorno</h3>
+            <Card className="p-6 space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Seu WhatsApp</label>
+                  <input 
+                    type="tel" 
+                    placeholder="(00) 00000-0000"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-brand-blue/20 transition-all font-mono"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-2">
+                    Nossos consultores entrarão em contato através deste número.
+                  </p>
+                </div>
+              </div>
+            </Card>
+            <Button className="w-full py-4" onClick={() => setStep(2)}>Confirmar e Continuar</Button>
           </motion.div>
         )}
 
@@ -1118,6 +1165,95 @@ const Proposals = ({ user }: { user: AppUser }) => {
   );
 };
 
+const Profile = ({ user }: { user: AppUser }) => {
+  const [phone, setPhone] = useState(user.phone || '');
+  const [cpf, setCpf] = useState(user.cpf || '');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      const cleaned = phone.replace(/\D/g, '');
+      const finalPhone = cleaned.length > 0 && !cleaned.startsWith('55') ? '55' + cleaned : cleaned;
+
+      await updateDoc(doc(db, 'users', user.uid), {
+        phone: finalPhone,
+        cpf: cpf.replace(/\D/g, '')
+      });
+      alert('Perfil atualizado com sucesso!');
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao atualizar perfil.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <header>
+        <h2 className="text-2xl font-bold text-slate-900">Meu Perfil</h2>
+      </header>
+      <Card className="p-6">
+        <div className="flex flex-col items-center gap-4 mb-8">
+          <div className="w-20 h-20 rounded-full bg-brand-blue/10 text-brand-blue flex items-center justify-center text-2xl font-bold">
+            {user.displayName?.[0]}
+          </div>
+          <div className="text-center">
+            <div className="font-bold text-lg flex items-center justify-center gap-2">
+              {user.displayName}
+              {user.role === 'admin' && (
+                <ShieldCheck size={16} className="text-brand-orange" />
+              )}
+            </div>
+            <p className="text-sm text-slate-400">{user.email}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase px-1">WhatsApp</label>
+            <input 
+              type="tel" 
+              placeholder="Ex: 27 99999-8888"
+              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-blue/20 outline-none"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase px-1">CPF</label>
+            <input 
+              type="text" 
+              placeholder="000.000.000-00"
+              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-blue/20 outline-none"
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value)}
+            />
+          </div>
+          <Button 
+            className="w-full mt-4" 
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="p-4 border-dashed border-slate-200">
+        <Button 
+          variant="outline" 
+          className="w-full text-rose-500 border-rose-100 hover:bg-rose-50"
+          onClick={() => signOut(auth)}
+        >
+          <LogOut size={16} className="mr-2" /> Sair da Conta
+        </Button>
+      </Card>
+    </div>
+  );
+};
+
 const Layout = ({ children, user }: { children: React.ReactNode; user: AppUser }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1235,30 +1371,7 @@ export default function App() {
             <Route path="/new-proposal" element={<Layout user={user}><ProposalFlow user={user} /></Layout>} />
             <Route path="/proposals" element={<Layout user={user}><Proposals user={user} /></Layout>} />
             <Route path="/help" element={<Layout user={user}><Help /></Layout>} />
-            <Route path="/profile" element={<Layout user={user}>
-              <div className="space-y-6">
-                <header>
-                  <h2 className="text-2xl font-bold text-slate-900">Meu Perfil</h2>
-                </header>
-                <Card className="p-6 flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-full bg-brand-blue/10 text-brand-blue flex items-center justify-center text-2xl font-bold">
-                    {user.displayName?.[0]}
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-lg flex items-center justify-center gap-2">
-                      {user.displayName}
-                      {user.role === 'admin' && (
-                        <span className="bg-brand-blue text-white text-[8px] px-1.5 py-0.5 rounded uppercase">Admin</span>
-                      )}
-                    </div>
-                    <div className="text-sm text-slate-500">{user.email}</div>
-                  </div>
-                  <Button variant="outline" className="w-full mt-4" onClick={() => signOut(auth)}>
-                    <LogOut size={18} className="mr-2" /> Sair da Conta
-                  </Button>
-                </Card>
-              </div>
-            </Layout>} />
+            <Route path="/profile" element={<Layout user={user}><Profile user={user} /></Layout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         )}

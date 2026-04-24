@@ -74,7 +74,12 @@ service cloud.firestore {
       return data.userId is string &&
              data.type in ['CONSIGNADO', 'FGTS', 'PESSOAL', 'CARTAO', 'LUZ', 'CLT'] &&
              data.value is number && data.value > 0 &&
-             data.status in ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED', 'IN_PROGRESS', 'COMPLETED'];
+             data.status in ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED', 'IN_PROGRESS', 'COMPLETED'] &&
+             (data.get('userName', null) == null || data.userName is string) &&
+             (data.get('userEmail', null) == null || data.userEmail is string) &&
+             (data.get('userPhone', null) == null || data.userPhone is string) &&
+             (data.get('installments', null) == null || data.installments is number) &&
+             (data.get('bankRef', null) == null || data.bankRef is string);
     }
 
     function isValidDocument(data) {
