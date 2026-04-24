@@ -10,6 +10,7 @@ export interface User {
   phone?: string;
   cpf?: string;
   role: 'client' | 'admin';
+  isPhoneVerified?: boolean;
   createdAt: string;
 }
 

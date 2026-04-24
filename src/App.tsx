@@ -627,6 +627,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   const [amount, setAmount] = useState(1000);
   const [phone, setPhone] = useState(user.phone || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [handshakeDone, setHandshakeDone] = useState(false);
   const navigate = useNavigate();
 
   const sanitizePhone = (p: string) => {
@@ -638,19 +639,43 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
     return cleaned;
   };
 
-  const handleSubmitProposal = async () => {
+  const handleHandshake = () => {
     const sanitizedPhone = sanitizePhone(phone);
     if (!sanitizedPhone || sanitizedPhone.length < 10) {
       alert('Por favor, informe seu número de WhatsApp com DDD');
+      return;
+    }
+    
+    const code = user.uid.slice(-6).toUpperCase();
+    const text = encodeURIComponent(`Olá! Gostaria de validar meu acesso no App Realcred. Meu código de verificação é: ${code}`);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, '_blank');
+    setHandshakeDone(true);
+  };
+
+  const handleSubmitProposal = async () => {
+    const sanitizedPhone = sanitizePhone(phone);
+    if (!sanitizedPhone) {
       setStep(1.5);
+      return;
+    }
+
+    if (!user.isPhoneVerified && !handshakeDone) {
+      setStep(1.7);
       return;
     }
 
     try {
       setIsSubmitting(true);
       
-      if (sanitizedPhone && sanitizedPhone !== user.phone) {
-        await updateDoc(doc(db, 'users', user.uid), { phone: sanitizedPhone });
+      // Update user info if changed or verified
+      const updates: any = {};
+      if (sanitizedPhone !== user.phone) updates.phone = sanitizedPhone;
+      if (!user.isPhoneVerified && (handshakeDone || sanitizedPhone === user.phone)) {
+        updates.isPhoneVerified = true;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await updateDoc(doc(db, 'users', user.uid), updates);
       }
 
       const proposalData = {
@@ -741,7 +766,13 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
                 </Card>
               ))}
             </div>
-            <Button className="w-full py-4 mt-4" onClick={() => setStep(1.5)}>Próximo Passo</Button>
+            <Button className="w-full py-4 mt-4" onClick={() => {
+              if (user.isPhoneVerified) {
+                setStep(2);
+              } else {
+                setStep(1.5);
+              }
+            }}>Próximo Passo</Button>
           </motion.div>
         )}
 
@@ -753,25 +784,72 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
             exit={{ opacity: 0, x: -20 }}
             className="space-y-6"
           >
-            <h3 className="font-bold text-slate-800">Seu contato para retorno</h3>
+            <h3 className="font-bold text-slate-800">Seu WhatsApp para contato</h3>
             <Card className="p-6 space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Seu WhatsApp</label>
-                  <input 
-                    type="tel" 
-                    placeholder="(00) 00000-0000"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-brand-blue/20 transition-all font-mono"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                  <p className="text-[10px] text-slate-400 mt-2">
-                    Nossos consultores entrarão em contato através deste número.
-                  </p>
-                </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Seu WhatsApp</label>
+                <input 
+                  type="tel" 
+                  placeholder="(27) 99999-0000"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-brand-blue/20 transition-all font-mono"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+                <p className="text-[10px] text-slate-400 mt-2">
+                  Usaremos este número para enviar atualizações da sua proposta.
+                </p>
               </div>
             </Card>
-            <Button className="w-full py-4" onClick={() => setStep(2)}>Confirmar e Continuar</Button>
+            <Button className="w-full py-4" onClick={() => {
+              const sanitized = sanitizePhone(phone);
+              if (sanitized.length < 10) {
+                alert('Por favor, informe um número válido com DDD');
+                return;
+              }
+              setStep(1.7);
+            }}>Confirmar e Validar</Button>
+          </motion.div>
+        )}
+
+        {step === 1.7 && (
+          <motion.div 
+            key="step1.7"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <h3 className="font-bold text-slate-800">Validação WhatsApp</h3>
+            <Card className="p-6 space-y-6 text-center">
+              <div className="w-16 h-16 bg-brand-blue/10 text-brand-blue rounded-full flex items-center justify-center mx-auto">
+                <ShieldCheck size={32} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Para sua segurança, precisamos validar se o número <strong>{phone}</strong> pertence a você.
+                </p>
+                <p className="text-xs text-slate-400">
+                  Clique no botão abaixo para nos enviar uma mensagem automática de confirmação.
+                </p>
+              </div>
+
+              {!handshakeDone ? (
+                <Button variant="secondary" className="w-full py-4" onClick={handleHandshake}>
+                  <MessageSquare size={18} className="mr-2" /> Iniciar Validação no WhatsApp
+                </Button>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl border border-emerald-100 flex items-center gap-3">
+                    <CheckCircle2 size={18} className="shrink-0" />
+                    <span className="text-xs font-bold">Mensagem enviada com sucesso!</span>
+                  </div>
+                  <Button className="w-full py-4" onClick={() => setStep(2)}>
+                    Continuar Solicitação
+                  </Button>
+                </div>
+              )}
+            </Card>
+            <Button variant="ghost" className="w-full text-slate-400 font-bold" onClick={() => setStep(1.5)}>Trocar número</Button>
           </motion.div>
         )}
 
@@ -1170,6 +1248,23 @@ const Profile = ({ user }: { user: AppUser }) => {
   const [cpf, setCpf] = useState(user.cpf || '');
   const [isSaving, setIsSaving] = useState(false);
 
+  const handleHandshake = () => {
+    const cleaned = phone.replace(/\D/g, '');
+    const sanitized = cleaned.length > 0 && !cleaned.startsWith('55') ? '55' + cleaned : cleaned;
+    
+    if (sanitized.length < 10) {
+      alert('Informe um número válido para validar.');
+      return;
+    }
+
+    const code = user.uid.slice(-6).toUpperCase();
+    const text = encodeURIComponent(`Olá! Gostaria de validar meu acesso no App Realcred. Meu código de verificação é: ${code}`);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, '_blank');
+    
+    // Marcar como verificado após o clique (para simplificar o fluxo web)
+    updateDoc(doc(db, 'users', user.uid), { isPhoneVerified: true });
+  };
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
@@ -1178,7 +1273,9 @@ const Profile = ({ user }: { user: AppUser }) => {
 
       await updateDoc(doc(db, 'users', user.uid), {
         phone: finalPhone,
-        cpf: cpf.replace(/\D/g, '')
+        cpf: cpf.replace(/\D/g, ''),
+        // Se mudou o telefone, desvalida
+        ...(finalPhone !== user.phone ? { isPhoneVerified: false } : {})
       });
       alert('Perfil atualizado com sucesso!');
     } catch (err) {
@@ -1196,8 +1293,15 @@ const Profile = ({ user }: { user: AppUser }) => {
       </header>
       <Card className="p-6">
         <div className="flex flex-col items-center gap-4 mb-8">
-          <div className="w-20 h-20 rounded-full bg-brand-blue/10 text-brand-blue flex items-center justify-center text-2xl font-bold">
-            {user.displayName?.[0]}
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full bg-brand-blue/10 text-brand-blue flex items-center justify-center text-2xl font-bold">
+              {user.displayName?.[0]}
+            </div>
+            {user.isPhoneVerified && (
+              <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
+                <CheckCircle2 size={14} />
+              </div>
+            )}
           </div>
           <div className="text-center">
             <div className="font-bold text-lg flex items-center justify-center gap-2">
@@ -1212,7 +1316,18 @@ const Profile = ({ user }: { user: AppUser }) => {
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase px-1">WhatsApp</label>
+            <div className="flex justify-between items-center px-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">WhatsApp</label>
+              {user.isPhoneVerified ? (
+                <span className="text-[10px] font-bold text-emerald-500 uppercase flex items-center gap-1">
+                  <CheckCircle2 size={10} /> Validado
+                </span>
+              ) : (
+                <button onClick={handleHandshake} className="text-[10px] font-bold text-brand-orange uppercase hover:underline">
+                  Validar Agora
+                </button>
+              )}
+            </div>
             <input 
               type="tel" 
               placeholder="Ex: 27 99999-8888"
