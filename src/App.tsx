@@ -126,34 +126,20 @@ const Login = () => {
     setIsLoggingIn(true);
     
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    
     try {
-      // Usar select_account apenas se não houver erro prévio
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      const userRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userRef);
-      
-      if (!userDoc.exists()) {
-        const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
-        const isAdmin = adminEmails.includes(user.email || '');
-        await setDoc(userRef, {
-          uid: user.uid,
-          displayName: user.displayName,
-          email: user.email,
-          role: isAdmin ? 'admin' : 'client',
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await signInWithPopup(auth, provider);
+      // O onAuthStateChanged no App.tsx cuidará do restante (carregamento/persistência)
     } catch (error: any) {
       console.error('Login error:', error);
       setIsLoggingIn(false);
       if (error.code === 'auth/popup-blocked') {
         alert('O login foi bloqueado pelo seu navegador. Por favor, habilite popups ou abra o aplicativo em uma nova aba para entrar.');
       } else if (error.code === 'auth/popup-closed-by-user') {
-        // Silenciosamente ignorar se o usuário fechou
+        // Ignorar
       } else {
-        alert('Erro ao entrar com Google: ' + error.message + '\n\nDica: Tente abrir o aplicativo em uma nova aba fora do editor.');
+        alert('Erro ao entrar: ' + error.message);
       }
     }
   };
@@ -1259,37 +1245,43 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const userDoc = await getDoc(userRef);
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as AppUser;
+      try {
+        if (firebaseUser) {
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userRef);
           const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
           const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
           
-          if (shouldBeAdmin && userData.role !== 'admin') {
-            const updatedUser = { ...userData, role: 'admin' as const };
-            await setDoc(userRef, updatedUser);
-            setUser(updatedUser);
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as AppUser;
+            
+            if (shouldBeAdmin && userData.role !== 'admin') {
+              const updatedUser = { ...userData, role: 'admin' as const };
+              await setDoc(userRef, updatedUser);
+              setUser(updatedUser);
+            } else {
+              setUser(userData);
+            }
           } else {
-            setUser(userData);
+            // Persistir novo usuário imediatamente
+            const newUser: AppUser = {
+              uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName,
+              email: firebaseUser.email,
+              role: shouldBeAdmin ? 'admin' : 'client',
+              createdAt: new Date().toISOString(),
+            };
+            await setDoc(userRef, newUser);
+            setUser(newUser);
           }
         } else {
-          const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
-          const newUser: AppUser = {
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName,
-            email: firebaseUser.email,
-            role: adminEmails.includes(firebaseUser.email || '') ? 'admin' : 'client',
-            createdAt: new Date().toISOString(),
-          };
-          setUser(newUser);
+          setUser(null);
         }
-      } else {
-        setUser(null);
+      } catch (err) {
+        console.error('Auth state change error:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
