@@ -16,6 +16,9 @@ export interface User {
 export interface Proposal {
   id: string;
   userId: string;
+  userName?: string | null;
+  userEmail?: string | null;
+  userPhone?: string;
   type: ProposalType;
   value: number;
   installments: number;

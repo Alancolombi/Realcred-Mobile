@@ -74,7 +74,7 @@ service cloud.firestore {
       return data.userId is string &&
              data.type in ['CONSIGNADO', 'FGTS', 'PESSOAL', 'CARTAO', 'LUZ', 'CLT'] &&
              data.value is number && data.value > 0 &&
-             data.status in ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED'];
+             data.status in ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED', 'IN_PROGRESS', 'COMPLETED'];
     }
 
     function isValidDocument(data) {

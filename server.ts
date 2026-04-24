@@ -106,41 +106,6 @@ async function startServer() {
     }
   });
 
-  // --- Integração Bancária (Proxy Seguro) ---
-  app.post('/api/bank/simulate', express.json(), async (req, res) => {
-    try {
-      const { cpf, type, value } = req.body;
-      const apiUrl = process.env.BANK_API_URL;
-      const clientId = process.env.BANK_CLIENT_ID;
-
-      console.log(`[BANK API] Simulando para CPF: ${cpf}, Tipo: ${type}`);
-
-      // Simulação de resposta (MOCK) se não houver chaves reais
-      if (!apiUrl || !clientId) {
-        return res.json({
-          success: true,
-          isMock: true,
-          margin: value * 0.95,
-          installments: 84,
-          monthlyValue: (value / 84) * 1.0185,
-          message: "Modo de simulação (Chaves de API bancária não configuradas)."
-        });
-      }
-      
-      res.status(501).json({ error: "Integração específica do banco não configurada no server.ts" });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post('/api/bank/submit-proposal', express.json(), async (req, res) => {
-    try {
-      res.json({ success: true, status: 'SENT_TO_BANK', bankRef: 'REAL-' + Date.now() });
-    } catch (error) {
-      res.status(500).json({ error: "Falha ao enviar ao banco" });
-    }
-  });
-
   // Vite integration
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

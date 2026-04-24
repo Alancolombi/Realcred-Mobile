@@ -25,7 +25,6 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { BankService } from './services/bankService';
 import { User as AppUser, Proposal, ProposalStatus } from './types';
 import { 
   LayoutDashboard, 
@@ -627,29 +626,10 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   const [type, setType] = useState('FGTS');
   const [amount, setAmount] = useState(1000);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [bankSimulation, setBankSimulation] = useState<any>(null);
-  const [isSimulatingBank, setIsSimulatingBank] = useState(false);
   const navigate = useNavigate();
 
   const handleNextToStep2 = () => {
     setStep(2);
-  };
-
-  const handleBankSimulation = async () => {
-    try {
-      setIsSimulatingBank(true);
-      // Aqui usamos um CPF fictício ou pedimos ao usuário (idealmente pedir no formulário)
-      // Para este exemplo, vamos simular que o usuário já tem o perfil completo
-      const simulation = await BankService.simulateRealMargin('000.000.000-00', type, amount);
-      setBankSimulation(simulation);
-      setStep(3); // Pula para o resultado final com dados do banco
-    } catch (error) {
-      console.error(error);
-      // Se falhar a simulação real, seguimos com a manual
-      setStep(3);
-    } finally {
-      setIsSimulatingBank(false);
-    }
   };
 
   const handleSubmitProposal = async () => {
@@ -660,11 +640,10 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
         userId: user.uid,
         userName: user.displayName,
         userEmail: user.email,
+        userPhone: user.phone || '', // Store user phone for the manager to see
         type,
         value: amount,
-        installments: bankSimulation?.installments || 12,
-        monthlyValue: bankSimulation?.monthlyValue || 0,
-        bankRef: bankSimulation?.bankRef || 'PENDING_BANK',
+        installments: 12,
         status: 'ANALYSIS',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -672,7 +651,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
 
       await addDoc(collection(db, 'proposals'), proposalData);
 
-      // Notificar via WhatsApp automaticamente
+      // Notificar via WhatsApp
       const typeLabels: Record<string, string> = {
         FGTS: 'Antecipação FGTS',
         CONSIGNADO: 'Consignado INSS',
@@ -683,33 +662,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       };
       const text = `Olá! Acabei de enviar uma proposta pelo App Realcred:\n\n*Cliente:* ${user.displayName || 'Não informado'}\n*Modalidade:* ${typeLabels[type] || type}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n\nFico no aguardo do contato para finalizar!`;
       
-      // Notificar admin via e-mail (Mantido como backup, caso o DNS propague)
-      try {
-        console.log('[Email] Enviando proposta para o servidor...', proposalData);
-        const response = await fetch('/api/notify-simulation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user: {
-              uid: user.uid,
-              displayName: user.displayName,
-              email: user.email
-            },
-            simulation: proposalData
-          })
-        });
-        
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-          console.error('[Email] Falha na notificação:', result.error || 'Erro desconhecido');
-        } else {
-          console.log('[Email] Notificação enviada com sucesso!');
-        }
-      } catch (err) {
-        console.warn('[Email] Erro de rede ou servidor ao notificar:', err);
-      }
-      
-      // Abrir WhatsApp
+      // Abrir WhatsApp com destino ao Gestor
       window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, '_blank');
       
       setStep(3);
@@ -721,15 +674,8 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
     }
   };
 
-  const handleWhatsAppProposal = () => {
-    const typeLabels: Record<string, string> = {
-      FGTS: 'Antecipação FGTS',
-      CONSIGNADO: 'Consignado INSS',
-      PESSOAL: 'Crédito Pessoal',
-      CLT: 'Crédito CLT'
-    };
-    const text = `Olá! Acabei de enviar uma proposta pelo App Realcred:\n\n*Modalidade:* ${typeLabels[type]}\n*Valor:* R$ ${amount.toLocaleString('pt-BR')}\n\nFico no aguardo do contato para finalizar!`;
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, '_blank');
+  const handleFinish = () => {
+    navigate('/');
   };
 
   return (
@@ -808,20 +754,20 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
             </Card>
             <Button 
               className="w-full py-4" 
-              onClick={handleBankSimulation}
-              disabled={isSimulatingBank}
+              onClick={handleSubmitProposal}
+              disabled={isSubmitting}
             >
-              {isSimulatingBank ? (
+              {isSubmitting ? (
                 <>
                   <motion.div 
                     animate={{ rotate: 360 }}
                     transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
                     className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"
                   />
-                  Consultando Margem no Banco...
+                  Enviando Solicitação...
                 </>
               ) : (
-                "Simular Margem Real"
+                "Solicitar Agora"
               )}
             </Button>
           </motion.div>
@@ -835,55 +781,27 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
             exit={{ opacity: 0, x: -20 }}
             className="space-y-6"
           >
-             {bankSimulation ? (
-               <>
-                <h3 className="font-bold text-slate-800 text-center">Simulação Realizada no Banco</h3>
-                <Card className="p-6 bg-brand-blue text-white shadow-xl space-y-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-[10px] font-bold opacity-70 uppercase tracking-widest">Margem Disponível</div>
-                      <div className="text-3xl font-bold">R$ {bankSimulation.margin.toLocaleString('pt-BR')}</div>
-                    </div>
-                    <CheckCircle2 className="text-brand-accent h-10 w-10" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/20">
-                    <div>
-                      <div className="text-[10px] font-bold opacity-60 uppercase mb-1">Parcelas</div>
-                      <div className="text-sm font-bold">{bankSimulation.installments}x</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold opacity-60 uppercase mb-1">Valor Mensal</div>
-                      <div className="text-sm font-bold">R$ {bankSimulation.monthlyValue.toLocaleString('pt-BR')}</div>
-                    </div>
-                  </div>
-                </Card>
-                {bankSimulation.isMock && (
-                  <div className="text-[10px] text-slate-400 text-center italic">
-                    {bankSimulation.message}
-                  </div>
-                )}
-               </>
-             ) : (
-               <>
-                <h3 className="font-bold text-slate-800 text-center">Tudo pronto!</h3>
-                <div className="text-center space-y-4">
-                  <div className="w-20 h-20 bg-brand-orange/10 text-brand-orange rounded-full flex items-center justify-center mx-auto">
-                    <CheckCircle2 size={40} />
-                  </div>
-                  <p className="text-slate-600">Sua proposta de <strong>{type}</strong> no valor de <strong>R$ {amount.toLocaleString('pt-BR')}</strong> foi enviada para análise.</p>
-                </div>
-               </>
-             )}
+            <h3 className="font-bold text-slate-800 text-center">Tudo pronto!</h3>
+            <div className="text-center space-y-4">
+              <div className="w-20 h-20 bg-brand-orange/10 text-brand-orange rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 size={40} />
+              </div>
+              <p className="text-slate-600">Sua proposta de <strong>{type}</strong> no valor de <strong>R$ {amount.toLocaleString('pt-BR')}</strong> foi enviada para análise.</p>
+            </div>
+            
+            <Card className="p-4 bg-brand-blue/5 border-brand-blue/10 flex items-start gap-3">
+              <AlertCircle size={20} className="text-brand-blue shrink-0 mt-0.5" />
+              <p className="text-xs text-brand-blue leading-relaxed font-medium">
+                Nossos consultores entrarão em contato via WhatsApp em até 15 minutos para finalizar o processo.
+              </p>
+            </Card>
 
-            <Button 
-              className="w-full py-4 text-lg" 
-              variant="secondary" 
-              onClick={handleSubmitProposal}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Enviando ao Banco...' : 'Enviar e Falar no WhatsApp'}
-            </Button>
-            <Button variant="ghost" className="w-full text-slate-400" onClick={() => setStep(2)}>Voltar e Ajustar</Button>
+            <div className="flex flex-col gap-3">
+              <Button className="w-full py-4" variant="secondary" onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')}>
+                <MessageSquare size={18} className="mr-2" /> Falar no WhatsApp
+              </Button>
+              <Button variant="ghost" className="w-full text-slate-400" onClick={handleFinish}>Voltar ao Início</Button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1152,7 +1070,11 @@ const Proposals = ({ user }: { user: AppUser }) => {
                         </span>
                       </div>
                       <button 
-                        onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Olá ${(p as any).userName || ''}, vi sua simulação de R$ ${p.value.toLocaleString('pt-BR')} no App Realcred.`)}`, '_blank')}
+                        onClick={() => {
+                          const clientPhone = (p as any).userPhone || '';
+                          const text = encodeURIComponent(`Olá ${(p as any).userName || ''}, vi sua simulação de R$ ${p.value.toLocaleString('pt-BR')} no App Realcred.`);
+                          window.open(`https://wa.me/${clientPhone}?text=${text}`, '_blank');
+                        }}
                         className="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5"
                       >
                         <MessageSquare size={12} /> WHATSAPP
