@@ -1,117 +1,142 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    // Collection: users
-    // Document ID: {userId}
-    // Fields:
-    //   - uid: string (required)
-    //   - displayName: string
-    //   - email: string (required)
-    //   - phone: string
-    //   - cpf: string
-    //   - role: string (required, ['client', 'admin'])
-    //   - createdAt: timestamp
-    //
-    // Collection: proposals
-    // Document ID: {proposalId}
-    // Fields:
-    //   - userId: string (required)
-    //   - type: string (required, ['CONSIGNADO', 'FGTS', 'PESSOAL', 'CARTAO', 'LUZ', 'CLT'])
-    //   - value: number (required)
-    //   - installments: int
-    //   - status: string (required, ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED'])
-    //   - createdAt: timestamp
-    //   - updatedAt: timestamp
-    //
-    // Collection: documents
-    // Document ID: {documentId}
-    // Fields:
-    //   - proposalId: string (required)
-    //   - userId: string (required)
-    //   - type: string (required, ['RG', 'RESIDENCE', 'PAYSLIP'])
-    //   - url: string (required)
-    //   - status: string (required, ['PENDING', 'VERIFIED', 'REJECTED'])
-    //   - createdAt: timestamp
-
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         ((request.auth.token.email == "alancolombi30@gmail.com" || request.auth.token.email == "realcred.pc@gmail.com") && request.auth.token.email_verified == true));
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+    
+    // 0. Global Safety Net - Deny all by default
+    match /{document=**} {
+      allow read, write: if false;
     }
 
     // ===============================================================
-    // Validators
+    // GLOBAL HELPERS
     // ===============================================================
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    // Identity Roles
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    
+    // Admin check: Trusted emails or explicit admin role
+    function isAdmin() { 
+      return isSignedIn() && (
+        (request.auth.token.email in ["alancolombi30@gmail.com", "realcred.pc@gmail.com"] && request.auth.token.email_verified == true) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    // ===============================================================
+    // VALIDATION BLUEPRINTS
+    // ===============================================================
+    
     function isValidUser(data) {
-      return data.uid is string && 
-             data.email is string && isValidEmail(data.email) &&
-             data.role in ['client', 'admin'];
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.keys().size() >= 3 && data.keys().size() <= 10 &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 100 &&
+             data.role in ['client', 'admin'] &&
+             (data.get('displayName', null) == null || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (data.get('phone', null) == null || (data.phone is string && data.phone.size() <= 20)) &&
+             (data.get('cpf', null) == null || (data.cpf is string && data.cpf.size() <= 14)) &&
+             (data.get('createdAt', null) == null || data.createdAt == request.time);
     }
 
     function isValidProposal(data) {
-      return data.userId is string &&
+      return data.keys().hasAll(['userId', 'type', 'value', 'status']) &&
+             data.keys().size() >= 4 && data.keys().size() <= 15 &&
+             isValidId(data.userId) &&
              data.type in ['CONSIGNADO', 'FGTS', 'PESSOAL', 'CARTAO', 'LUZ', 'CLT'] &&
-             data.value is number && data.value > 0 &&
+             data.value is number && data.value > 0 && data.value < 100000000 &&
              data.status in ['PENDING', 'ANALYSIS', 'APPROVED', 'PAID', 'REJECTED', 'IN_PROGRESS', 'COMPLETED'] &&
-             (data.get('userName', null) == null || data.userName is string) &&
-             (data.get('userEmail', null) == null || data.userEmail is string) &&
-             (data.get('userPhone', null) == null || data.userPhone is string) &&
-             (data.get('installments', null) == null || data.installments is number) &&
-             (data.get('bankRef', null) == null || data.bankRef is string);
+             (data.get('userName', null) == null || (data.userName is string && data.userName.size() <= 100)) &&
+             (data.get('userPhone', null) == null || (data.userPhone is string && data.userPhone.size() <= 20)) &&
+             (data.get('installments', null) == null || (data.installments is int && data.installments > 0)) &&
+             (data.get('bankRef', null) == null || (data.bankRef is string && data.bankRef.size() <= 50)) &&
+             (data.get('createdAt', null) == null || data.createdAt == request.time) &&
+             (data.get('updatedAt', null) == null || data.updatedAt == request.time);
     }
 
     function isValidDocument(data) {
-      return data.proposalId is string &&
-             data.userId is string &&
+      return data.keys().hasAll(['proposalId', 'userId', 'type', 'url', 'status']) &&
+             data.keys().size() >= 5 && data.keys().size() <= 10 &&
+             isValidId(data.proposalId) &&
+             isValidId(data.userId) &&
              data.type in ['RG', 'RESIDENCE', 'PAYSLIP'] &&
-             data.url is string &&
-             data.status in ['PENDING', 'VERIFIED', 'REJECTED'];
+             data.url is string && data.url.size() <= 512 && data.url.matches('^https://.*') &&
+             data.status in ['PENDING', 'VERIFIED', 'REJECTED'] &&
+             (data.get('createdAt', null) == null || data.createdAt == request.time);
     }
 
     // ===============================================================
-    // Rules
+    // RESOURCE RULES
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'client' || isAdmin());
-      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow get: if isOwner(userId) || isAdmin();
+      // List blocked for clients to prevent scraping
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && 
+                      isValidUser(incoming()) && 
+                      incoming().role == 'client'; // Force client role on registration
+      
+      allow update: if isOwner(userId) && isValidId(userId) && (
+        // Action: Update Profile
+        (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'cpf', 'updatedAt']) && 
+         isValidUser(incoming())) ||
+        // Action: Admin Role Change
+        isAdmin()
+      );
     }
 
     match /proposals/{proposalId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidProposal(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidProposal(request.resource.data);
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && 
+                      isValidId(proposalId) &&
+                      incoming().userId == request.auth.uid && 
+                      incoming().status == 'PENDING' &&
+                      isValidProposal(incoming());
+      
+      allow update: if isSignedIn() && isValidId(proposalId) && (
+        // Action: Client correction (only while pending)
+        (isOwner(existing().userId) && 
+         existing().status == 'PENDING' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['value', 'type', 'installments', 'updatedAt']) &&
+         isValidProposal(incoming())) ||
+         
+        // Action: Admin status/ref update
+        (isAdmin() && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'bankRef', 'updatedAt']) &&
+         isValidProposal(incoming()))
+      );
+      
       allow delete: if isAdmin();
     }
 
     match /documents/{documentId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidDocument(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidDocument(request.resource.data);
-      allow delete: if isAdmin();
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && 
+                      isValidId(documentId) &&
+                      incoming().userId == request.auth.uid && 
+                      incoming().status == 'PENDING' &&
+                      isValidDocument(incoming()) &&
+                      exists(/databases/$(database)/documents/proposals/$(incoming().proposalId));
+      
+      allow update: if isAdmin() && 
+                      isValidId(documentId) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
+                      isValidDocument(incoming());
+                      
+      allow delete: if isAdmin() || (isOwner(resource.data.userId) && resource.data.status == 'PENDING');
     }
   }
 }

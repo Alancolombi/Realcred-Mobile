@@ -56,6 +56,41 @@ import { cn } from './lib/utils';
 
 const WHATSAPP_NUMBER = '5527999018502';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Security Violation: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' | 'ghost' }>(
   ({ className, variant = 'primary', ...props }, ref) => {
     const variants = {
@@ -202,6 +237,8 @@ const Dashboard = ({ user }: { user: AppUser }) => {
       })) as Proposal[];
       setProposals(proposalsData);
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'proposals');
     });
 
     return () => unsubscribe();
@@ -650,7 +687,11 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       
       // Update user info if changed
       if (sanitizedPhone !== user.phone) {
-        await updateDoc(doc(db, 'users', user.uid), { phone: sanitizedPhone });
+        try {
+          await updateDoc(doc(db, 'users', user.uid), { phone: sanitizedPhone });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}`);
+        }
       }
 
       const proposalData = {
@@ -661,12 +702,16 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
         type,
         value: amount,
         installments: 12,
-        status: 'ANALYSIS',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        status: 'PENDING',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
-      await addDoc(collection(db, 'proposals'), proposalData);
+      try {
+        await addDoc(collection(db, 'proposals'), proposalData);
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, 'proposals');
+      }
 
       // Notificar via WhatsApp
       const typeLabels: Record<string, string> = {
@@ -926,6 +971,8 @@ const Proposals = ({ user }: { user: AppUser }) => {
       
       setProposals(proposalsData);
       setLoading(false);
+    }, (error) => {
+       handleFirestoreError(error, OperationType.GET, 'proposals');
     });
 
     return () => unsubscribe();
@@ -935,8 +982,13 @@ const Proposals = ({ user }: { user: AppUser }) => {
     if (!window.confirm('Tem certeza que deseja excluir esta proposta?')) return;
     try {
       setIsDeleting(id);
-      await deleteDoc(doc(db, 'proposals', id));
+      try {
+        await deleteDoc(doc(db, 'proposals', id));
+      } catch (e) {
+        handleFirestoreError(e, OperationType.DELETE, `proposals/${id}`);
+      }
     } catch (err) {
+      console.error(err);
       alert('Erro ao excluir proposta.');
     } finally {
       setIsDeleting(null);
@@ -945,8 +997,16 @@ const Proposals = ({ user }: { user: AppUser }) => {
 
   const handleUpdateStatus = async (id: string, status: ProposalStatus) => {
     try {
-      await updateDoc(doc(db, 'proposals', id), { status, updatedAt: new Date().toISOString() });
+      try {
+        await updateDoc(doc(db, 'proposals', id), { 
+          status, 
+          updatedAt: serverTimestamp() 
+        });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `proposals/${id}`);
+      }
     } catch (err) {
+      console.error(err);
       alert('Erro ao atualizar status.');
     }
   };
@@ -1187,10 +1247,14 @@ const Profile = ({ user }: { user: AppUser }) => {
       const cleaned = phone.replace(/\D/g, '');
       const finalPhone = cleaned.length > 0 && !cleaned.startsWith('55') ? '55' + cleaned : cleaned;
 
-      await updateDoc(doc(db, 'users', user.uid), {
-        phone: finalPhone,
-        cpf: cpf.replace(/\D/g, '')
-      });
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          phone: finalPhone,
+          cpf: cpf.replace(/\D/g, '')
+        });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}`);
+      }
       alert('Perfil atualizado com sucesso!');
     } catch (err) {
       console.error(err);
@@ -1321,31 +1385,44 @@ export default function App() {
       try {
         if (firebaseUser) {
           const userRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userRef);
-          const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
-          const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
-          
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as AppUser;
+          try {
+            const userDoc = await getDoc(userRef);
+            const adminEmails = ['alancolombi30@gmail.com', 'realcred.pc@gmail.com'];
+            const shouldBeAdmin = adminEmails.includes(firebaseUser.email || '');
             
-            if (shouldBeAdmin && userData.role !== 'admin') {
-              const updatedUser = { ...userData, role: 'admin' as const };
-              await setDoc(userRef, updatedUser);
-              setUser(updatedUser);
+            if (userDoc.exists()) {
+              const userData = userDoc.data() as AppUser;
+              
+              if (shouldBeAdmin && userData.role !== 'admin') {
+                const updatedUser = { ...userData, role: 'admin' as const };
+                try {
+                  await setDoc(userRef, updatedUser);
+                } catch (e) {
+                  handleFirestoreError(e, OperationType.WRITE, `users/${firebaseUser.uid}`);
+                }
+                setUser(updatedUser);
+              } else {
+                setUser(userData);
+              }
             } else {
-              setUser(userData);
+              // Persistir novo usuário imediatamente
+              const newUser = {
+                uid: firebaseUser.uid,
+                displayName: firebaseUser.displayName,
+                email: firebaseUser.email,
+                role: shouldBeAdmin ? 'admin' : 'client',
+                createdAt: serverTimestamp(),
+              };
+              try {
+                await setDoc(userRef, newUser);
+                // We need the plain object for state, so we convert timestamp to ISO for fallback
+                setUser({ ...newUser, createdAt: new Date().toISOString() } as unknown as AppUser);
+              } catch (e) {
+                handleFirestoreError(e, OperationType.WRITE, `users/${firebaseUser.uid}`);
+              }
             }
-          } else {
-            // Persistir novo usuário imediatamente
-            const newUser: AppUser = {
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName,
-              email: firebaseUser.email,
-              role: shouldBeAdmin ? 'admin' : 'client',
-              createdAt: new Date().toISOString(),
-            };
-            await setDoc(userRef, newUser);
-            setUser(newUser);
+          } catch (e) {
+             handleFirestoreError(e, OperationType.GET, `users/${firebaseUser.uid}`);
           }
         } else {
           setUser(null);
