@@ -28,6 +28,50 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
+  app.post('/api/validate-cpf', async (req, res) => {
+    try {
+      const { cpf: cpfValue } = req.body;
+      
+      if (!cpfValue || cpfValue.length !== 11) {
+        return res.status(400).json({ isValid: false, error: 'CPF inválido' });
+      }
+
+      // IMPORTANTE: Em produção, você usaria uma API real aqui (Ex: Serpro, InfoSimples, Hubla)
+      // Exemplo com InfoSimples (necessita KEY):
+      // const response = await axios.get(`https://api.infosimples.com/api/v2/consultar/receita-federal/cpf?token=${process.env.INFOSIMPLES_TOKEN}&cpf=${cpfValue}`);
+      
+      // Para este app, vamos realizar a validação matemática e simular a "Situação Cadastral"
+      // como sendo REGULAR se o checksum estiver correto.
+      
+      const { cpf } = await import('cpf-cnpj-validator');
+      const isValid = cpf.isValid(cpfValue);
+
+      if (!isValid) {
+        return res.json({ 
+          isValid: false, 
+          situacao: 'INVÁLIDO',
+          nome_rfb: null,
+          mensagem: 'O CPF informado não possui um formato ou dígito verificador válido.'
+        });
+      }
+
+      // Simulação de retorno da Receita Federal
+      // Nota: CPFs que começam com "000" ou terminam com "00" poderiam simular casos especiais se desejado
+      res.json({
+        isValid: true,
+        cpf: cpf.format(cpfValue),
+        nome_rfb: 'NOME OCULTO (SIMULAÇÃO RFB)', // APIs reais retornam o nome completo
+        situacao: 'REGULAR', // REGULAR, SUSPENSA, CANCELADA, TITULAR FALECIDO
+        data_consulta: new Date().toISOString(),
+        fonte: 'Simulação Receita Federal via API Realcred'
+      });
+      
+    } catch (err: any) {
+      console.error('[CPF] Erro na validação:', err);
+      res.status(500).json({ success: false, error: 'Erro interno ao validar CPF' });
+    }
+  });
+
   app.post('/api/notify-simulation', async (req, res) => {
     try {
       console.log('[Email] Recebido POST em /api/notify-simulation');

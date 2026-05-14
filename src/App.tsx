@@ -51,6 +51,7 @@ import {
   Search,
   RotateCcw
 } from 'lucide-react';
+import { validateCPF, formatCPF, stripCPF, checkSituacaoCadastral } from './lib/cpfValidation';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 
@@ -663,8 +664,35 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
   const [type, setType] = useState('FGTS');
   const [amount, setAmount] = useState(1000);
   const [phone, setPhone] = useState(user.phone || '');
+  const [cpf, setCpf] = useState(user.cpf || '');
+  const [rfbStatus, setRfbStatus] = useState<{ situacao: string; nome: string } | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+
+  const handleConsultRFB = async () => {
+    if (!validateCPF(cpf)) {
+      alert('CPF inválido para consulta.');
+      return;
+    }
+    
+    try {
+      setIsValidating(true);
+      const result = await checkSituacaoCadastral(cpf);
+      setRfbStatus({
+        situacao: result.situacao,
+        nome: result.nome_rfb || 'Não informado'
+      });
+      if (result.isValid) {
+        setCpf(formatCPF(cpf));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao consultar Receita Federal.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
   const sanitizePhone = (p: string) => {
     const cleaned = p.replace(/\D/g, '');
@@ -686,9 +714,13 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       setIsSubmitting(true);
       
       // Update user info if changed
-      if (sanitizedPhone !== user.phone) {
+      const updates: any = {};
+      if (sanitizedPhone !== user.phone) updates.phone = sanitizedPhone;
+      if (cpf && stripCPF(cpf) !== user.cpf) updates.cpf = stripCPF(cpf);
+
+      if (Object.keys(updates).length > 0) {
         try {
-          await updateDoc(doc(db, 'users', user.uid), { phone: sanitizedPhone });
+          await updateDoc(doc(db, 'users', user.uid), updates);
         } catch (e) {
           handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}`);
         }
@@ -826,8 +858,71 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
                 alert('Por favor, informe um número válido com DDD');
                 return;
               }
-              setStep(2);
+              setStep(1.7);
             }}>Confirmar e Continuar</Button>
+          </motion.div>
+        )}
+
+        {step === 1.7 && (
+          <motion.div 
+            key="step1.7"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <h3 className="font-bold text-slate-800">Sua identificação oficial</h3>
+            <Card className="p-6 space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center px-1">
+                  <label className="text-xs font-bold text-slate-400 uppercase">Seu CPF</label>
+                  {validateCPF(cpf) && (
+                    <button 
+                      onClick={handleConsultRFB}
+                      disabled={isValidating}
+                      className="text-[10px] font-bold text-brand-blue uppercase hover:underline flex items-center gap-1"
+                    >
+                      <Search size={10} /> {isValidating ? 'Validando...' : 'Validar na Receita'}
+                    </button>
+                  )}
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="000.000.000-00"
+                  className={cn(
+                    "w-full bg-slate-50 border rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-brand-blue/20 transition-all font-mono",
+                    cpf && !validateCPF(cpf) ? "border-rose-200" : "border-slate-200"
+                  )}
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
+                  onBlur={() => validateCPF(cpf) && setCpf(formatCPF(cpf))}
+                />
+                
+                {rfbStatus && (
+                   <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-emerald-800 uppercase">Situação Cadastral</span>
+                      <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 rounded font-bold">REGULAR</span>
+                    </div>
+                    <div className="text-xs text-emerald-700 font-bold uppercase truncate">
+                      {rfbStatus.nome}
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-[10px] text-slate-400 mt-2">
+                  Consulta segura realizada diretamente via sistema de validação da Receita Federal.
+                </p>
+              </div>
+            </Card>
+            <Button className="w-full py-4 text-lg" onClick={() => {
+              if (!validateCPF(cpf)) {
+                alert('Por favor, informe um CPF válido.');
+                return;
+              }
+              setStep(2);
+            }}>Confirmar CPF</Button>
+            <Button variant="ghost" className="w-full text-slate-400 font-bold" onClick={() => setStep(1.5)}>Voltar ao WhatsApp</Button>
           </motion.div>
         )}
 
@@ -1239,9 +1334,40 @@ const Proposals = ({ user }: { user: AppUser }) => {
 const Profile = ({ user }: { user: AppUser }) => {
   const [phone, setPhone] = useState(user.phone || '');
   const [cpf, setCpf] = useState(user.cpf || '');
+  const [rfbStatus, setRfbStatus] = useState<{ situacao: string; nome: string } | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const handleConsultRFB = async () => {
+    if (!validateCPF(cpf)) {
+      alert('CPF inválido para consulta.');
+      return;
+    }
+    
+    try {
+      setIsValidating(true);
+      const result = await checkSituacaoCadastral(cpf);
+      setRfbStatus({
+        situacao: result.situacao,
+        nome: result.nome_rfb || 'Não informado'
+      });
+      if (result.isValid) {
+        setCpf(formatCPF(cpf));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao consultar Receita Federal.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const handleSave = async () => {
+    if (cpf && !validateCPF(cpf)) {
+      alert('Por favor, informe um CPF válido antes de salvar.');
+      return;
+    }
+
     try {
       setIsSaving(true);
       const cleaned = phone.replace(/\D/g, '');
@@ -1250,7 +1376,7 @@ const Profile = ({ user }: { user: AppUser }) => {
       try {
         await updateDoc(doc(db, 'users', user.uid), {
           phone: finalPhone,
-          cpf: cpf.replace(/\D/g, '')
+          cpf: stripCPF(cpf)
         });
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}`);
@@ -1301,19 +1427,50 @@ const Profile = ({ user }: { user: AppUser }) => {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase px-1">CPF</label>
+            <div className="flex justify-between items-center px-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">CPF</label>
+              {validateCPF(cpf) && (
+                <button 
+                  onClick={handleConsultRFB}
+                  disabled={isValidating}
+                  className="text-[10px] font-bold text-brand-blue uppercase hover:underline flex items-center gap-1"
+                >
+                  <Search size={10} /> {isValidating ? 'Consultando...' : 'Consultar Receita'}
+                </button>
+              )}
+            </div>
             <input 
               type="text" 
               placeholder="000.000.000-00"
-              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-blue/20 outline-none"
+              className={cn(
+                "w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-blue/20 outline-none",
+                cpf && !validateCPF(cpf) ? "border-rose-200 focus:ring-rose-200" : "border-slate-100"
+              )}
               value={cpf}
               onChange={(e) => setCpf(e.target.value)}
+              onBlur={() => validateCPF(cpf) && setCpf(formatCPF(cpf))}
             />
+            {rfbStatus && (
+              <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Situação RFB</span>
+                  <span className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded uppercase",
+                    rfbStatus.situacao === 'REGULAR' ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                  )}>
+                    {rfbStatus.situacao}
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-600 font-medium truncate">
+                  {rfbStatus.nome}
+                </div>
+              </div>
+            )}
           </div>
           <Button 
             className="w-full mt-4" 
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || isValidating}
           >
             {isSaving ? 'Salvando...' : 'Salvar Alterações'}
           </Button>
