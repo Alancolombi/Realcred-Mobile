@@ -719,6 +719,7 @@ const ProposalFlow = ({ user }: { user: AppUser }) => {
       if (cpf && stripCPF(cpf) !== user.cpf) updates.cpf = stripCPF(cpf);
 
       if (Object.keys(updates).length > 0) {
+        updates.updatedAt = serverTimestamp();
         try {
           await updateDoc(doc(db, 'users', user.uid), updates);
         } catch (e) {
@@ -1376,7 +1377,8 @@ const Profile = ({ user }: { user: AppUser }) => {
       try {
         await updateDoc(doc(db, 'users', user.uid), {
           phone: finalPhone,
-          cpf: stripCPF(cpf)
+          cpf: stripCPF(cpf),
+          updatedAt: serverTimestamp()
         });
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}`);

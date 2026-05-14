@@ -11,6 +11,7 @@ export interface User {
   cpf?: string;
   role: 'client' | 'admin';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Proposal {
